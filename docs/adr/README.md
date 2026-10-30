@@ -4,7 +4,7 @@
 
 - 新しく書くときは [000-template.md](000-template.md) をコピーする
 - 一度決めた ADR は書き換えない。考えを変えたときは、新しい ADR を書き、古い ADR の状態を「廃止（ADR-YYY に置き換え）」にする
-- 番号は要件定義書の ADR の一覧に合わせる。006〜009・016・023 は、その機能を作るときに書く。014（メール）・021（機能フラグ）は、その機能を作らないので書かない
+- 番号は要件定義書の ADR の一覧に合わせる。一覧にない新しい判断は、025 から順に番号を付ける。006〜009・016・023 は、その機能を作るときに書く。014（メール）・021（機能フラグ）は、その機能を作らないので書かない
 
 | ADR | 決めたこと |
 | --- | --- |
@@ -24,3 +24,4 @@
 | [ADR-020](020-local-emulator.md) | ローカルの S3・SQS の代わりに LocalStack（Hobby）を使う |
 | [ADR-022](022-accounts-and-on-demand.md) | AWS のアカウントを staging と production で分け、どちらも使うときだけ作る |
 | [ADR-024](024-cloudflare-and-cloudfront.md) | 入口は Cloudflare（DNS・WAF・API のプロキシ）にし、画像は CloudFront で配る |
+| [ADR-025](025-branch-and-release.md) | ブランチは main だけにし、本番には Release の公開で出す |
