@@ -14,10 +14,12 @@ AI のコーディングエージェント（Codex・Claude Code など）と、
 ```
 apps/
 ├── web/        # 画面（Next.js、Vercel）        → apps/web/AGENTS.md
-├── api/        # API（Hono、Node.js、ECS）     → apps/api/AGENTS.md
-└── worker/     # 非同期ジョブ（Python、Celery、SQS）
+└── api/        # API（Hono、Node.js、ECS）     → apps/api/AGENTS.md
+services/
+└── worker/     # 非同期ジョブ（Python、FastAPI、Celery、SQS）
 packages/
 └── shared/     # 画面と API で共有する Zod スキーマ・エラーコード・型
+prisma/         # DB のスキーマ・マイグレーション・シード
 infra/
 └── terraform/  # AWS・Cloudflare のインフラ
 docs/           # 設計書（ERD・API・権限のテストケース）
@@ -69,9 +71,9 @@ Issue には、次を必ず設定する。
   - 要求：`req:FR-STP-01` のように、要件定義書の要件の番号。横断的なことは `req:` を付けない
   - 割り込み：`interrupt` は、今の Iteration への割り込みを認めた Issue（障害・要件の変更）にだけ付ける
   - 層：`layer:*` を**1つだけ**
-    - `layer:api`（`apps/api` ＋ Prisma・DB のマイグレーション）
+    - `layer:api`（`apps/api` ＋ `prisma/`・DB のマイグレーション）
     - `layer:web`（`apps/web`）
-    - `layer:worker`（`apps/worker`）
+    - `layer:worker`（`services/worker`）
     - `layer:shared`（`packages/shared`）
     - `layer:docs`（`docs/` だけ。コードの変更なし）
     - `layer:test`（結合・E2E・負荷などの横断的な検証。ユニットテストは各層に含める）
@@ -142,7 +144,7 @@ Issue には、次を必ず設定する。
 - 外から来るデータ（リクエスト・レスポンス・環境変数・DB の JSON）は、Zod で検証してから使う
 - マジックナンバー・マジックストリングを直書きしない。定数にする
 
-## Python のコード（`apps/worker` と、今後の Python のアプリすべて）
+## Python のコード（`services/worker` と、今後の Python のアプリすべて）
 
 ### ドキュメント（docstring）
 
@@ -168,10 +170,10 @@ Issue には、次を必ず設定する。
 ### 整形とリント（ruff）
 
 - **ruff format** で整形し、**ruff** のリントのルールに従う。どちらでも検査できる状態にしておく
-- 整形：`uv run ruff format src tests`
-- import の並びをそろえる：`uv run ruff check --select I --fix src tests`
+- 整形：`uv run ruff format app tests`
+- import の並びをそろえる：`uv run ruff check --select I --fix app tests`
 - 1行の長さは、`pyproject.toml` の `[tool.ruff]` の設定に従う
-- CI では `uv run --frozen ruff check src tests` と `uv run --frozen ruff format --check src tests` を実行する。ローカルと CI で、同じ道具・同じ基準で検査する
+- CI では `uv run --frozen ruff check app tests` と `uv run --frozen ruff format --check app tests` を実行する。ローカルと CI で、同じ道具・同じ基準で検査する
 
 ### コメント
 
@@ -241,4 +243,4 @@ class StoreImporter:
 - [ ] コメントが日本語で書かれている
 - [ ] PEP 8 に従っている
 
-ワーカーに固有の規約（Celery・SQS・ジョブの状態の扱い）は、S1-09 で `apps/worker/AGENTS.md` に足す。
+ワーカーに固有の規約（Celery・SQS・ジョブの状態の扱い）は、S1-09 で `services/worker/AGENTS.md` に足す。
