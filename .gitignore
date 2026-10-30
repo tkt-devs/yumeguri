@@ -1,0 +1,41 @@
+# --- 秘密の値（絶対にコミットしない） ---
+.env
+.env.*
+!.env.example
+
+# --- Node.js / pnpm ---
+node_modules/
+.pnpm-store/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# --- Next.js / Vercel ---
+.next/
+out/
+.vercel/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# --- OS・エディター ---
+.DS_Store
+.idea/
+*.swp
+
+# --- ログ ---
+*.log
