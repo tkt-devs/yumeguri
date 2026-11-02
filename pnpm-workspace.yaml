@@ -4,3 +4,6 @@ packages:
 allowBuilds:
   # tsx が使う。インストール時のスクリプトは、バイナリの確認だけなので動かさない
   esbuild: false
+  # Prisma の CLI とエンジン。エンジンは、最初に使うときに CLI がダウンロードする
+  '@prisma/engines': false
+  prisma: false

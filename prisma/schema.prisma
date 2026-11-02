@@ -1,0 +1,148 @@
+// DB の形（docs/erd.md）。表の名前はモデル名のまま、列の名前は snake_case（@map）
+// Prisma で書けない制約（NULLS NOT DISTINCT・CHECK・権限）は、SQL だけのマイグレーションで足す
+
+generator client {
+  provider = "prisma-client"
+  output   = "../apps/api/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+}
+
+enum AuthProvider {
+  google
+}
+
+enum MembershipRole {
+  staff
+  owner
+  org_admin
+}
+
+enum PlatformRoleName {
+  platform_admin
+}
+
+// 利用者
+model User {
+  id          String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  displayName String     @map("display_name")
+  // Google から受け取る。一意にしない（本人を表すのは AuthAccount）
+  email       String?
+  status      UserStatus @default(active)
+  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  authAccounts  AuthAccount[]
+  sessions      Session[]
+  memberships   Membership[]
+  platformRoles PlatformRole[]
+}
+
+// ログインの方法
+model AuthAccount {
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  provider        AuthProvider
+  // ID トークンの sub（Google の中で、その人を表す変わらない値）
+  providerSubject String       @map("provider_subject")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+}
+
+// ログイン中の状態
+model Session {
+  id         String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  // Cookie に入れるランダムな値の SHA-256。値そのものは DB に置かない
+  tokenHash  String    @unique @map("token_hash")
+  userId     String    @map("user_id") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  userAgent  String?   @map("user_agent")
+  ipHash     String?   @map("ip_hash")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// 団体（テナント）
+model Organization {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships Membership[]
+}
+
+// 団体・銭湯での役割
+model Membership {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  // 団体の管理者は NULL。Store への外部キーは、Store を作る S2-01 で足す
+  storeId        String?        @map("store_id") @db.Uuid
+  role           MembershipRole
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  // 実際の一意の制約は、NULLS NOT DISTINCT 付きで SQL のマイグレーションが作る
+  // （ここに書いておかないと、Prisma が「スキーマにない索引」として消そうとする）
+  @@unique([userId, organizationId, storeId, role])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+// システム全体の役割
+model PlatformRole {
+  id        String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  role      PlatformRoleName
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+}
+
+// 監査ログ（追記だけ）。対象が消えてもログは残すので、外部キーにしない
+model AuditLog {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  action         String
+  targetType     String   @map("target_type")
+  targetId       String?  @map("target_id") @db.Uuid
+  before         Json?
+  after          Json?
+  reason         String?
+  correlationId  String   @map("correlation_id")
+  ipHash         String?  @map("ip_hash")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([organizationId, createdAt])
+  @@index([targetType, targetId])
+}

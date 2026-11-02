@@ -14,10 +14,14 @@
 
 1. Docker Desktop を入れて、起動しておく
 2. LocalStack のアカウントを作り、[Auth Tokens](https://app.localstack.cloud/workspace/auth-tokens) で token をコピーする（Hobby は商用で使えない）
-3. `.env` を作って、token を入れる（`.env` は Git に入らない）
+3. `.env` を作って、token と、マイグレーション用の DB の接続先（`MIGRATE_DATABASE_URL`）を入れる（`.env` は Git に入らない）
 
    ```bash
    cp .env.example .env
+   ```
+
+   ```
+   MIGRATE_DATABASE_URL=postgresql://yumeguri_migrator:migrator_local@localhost:5433/yumeguri
    ```
 
 4. LocalStack 専用の AWS のプロフィールを作る。ダミーの鍵と、送り先の `endpoint_url` を入れておくので、**本物の AWS には届かない**。本物の認証情報を LocalStack に使わない
@@ -43,6 +47,24 @@ aws --profile localstack s3 ls
 aws --profile localstack sqs list-queues
 ```
 
+## DB の表を作る・やり直す（Prisma）
+
+表の形は `prisma/schema.prisma`、作った SQL は `prisma/migrations/`。Prisma のコマンドは、リポジトリのいちばん上で、マイグレーション用のユーザー（`.env` の `MIGRATE_DATABASE_URL`）として DB につなぐ。API はアプリ用のユーザー（`apps/api/.env` の `DATABASE_URL`）でつなぐ。
+
+| コマンド | 何をするか | 使うとき |
+| --- | --- | --- |
+| `pnpm exec prisma migrate dev` | まだ実行していないマイグレーションを実行する。`schema.prisma` を変えていれば、差分の SQL を作ってから実行する（`--name <名前>` を付ける） | 最初の1回・表を変えたとき・`main` を取り込んだとき |
+| `pnpm exec prisma migrate dev --create-only --name <名前>` | 空のマイグレーションを作るだけ（実行しない） | Prisma で書けない制約・権限を、SQL で手で書くとき |
+| `pnpm exec prisma db seed` | 架空のデータ（団体3つ・システム管理者1人）を入れる。何回実行しても同じ結果になる | 表を作ったあと |
+| `pnpm exec prisma generate` | API が使う Prisma Client を `apps/api/src/generated/prisma` に作る（Git に入らない）。初めての `pnpm install` や、依存が変わった `pnpm install` のあとには自動で実行される（`Already up to date` のときは実行されない） | `schema.prisma` を変えたとき・`main` を取り込んだとき |
+| `pnpm exec prisma migrate status` | どこまで実行したかを見る | 迷ったとき |
+
+DB を空からやり直すときは、`docker compose down -v` → `docker compose up -d` → `pnpm exec prisma migrate dev` → `pnpm exec prisma db seed`。
+
+- 一度 `main` に入れたマイグレーションのファイルは、書き換えない。直すときは、新しいマイグレーションを足す
+- マイグレーションは、DB のユーザー（`yumeguri_app`・`yumeguri_worker`）の権限を変える。なので、**ユーザーがない DB では失敗する**。ローカルは `01-roles.sql` が先に作る。staging・本番の RDS では、同じ内容の SQL を最初に一度だけ実行してから、`prisma migrate deploy` を実行する
+- Prisma の 8 は、まだ試験版（RC）なので上げない（`Update available … 8.0.0-rc` の表示は無視する）
+
 ## 止める・片付ける
 
 | コマンド | 箱 | DB のデータ | 使うとき |
@@ -65,4 +87,7 @@ aws --profile localstack sqs list-queues
 - **`LOCALSTACK_AUTH_TOKEN を .env に書いてください`**：`.env` がないか、token が空
 - **バケットやキューがない**：`curl -s localhost:4566/_localstack/init/ready` で、スクリプトが `SUCCESSFUL` になっているか見る。`docker compose logs aws` でエラーを探す
 - **`Unable to locate credentials`**：`aws` に `--profile localstack` を付け忘れている
+- **`The datasource.url property is required`**：いちばん上の `.env` に `MIGRATE_DATABASE_URL` がない
+- **API の型チェックで `Cannot find module '../generated/prisma/client'`**：Prisma Client がまだない。`pnpm exec prisma generate`
+- **`/readyz` が 503 で、ログに `"failed":["db"]`**：DB が止まっているか、`apps/api/.env` の `DATABASE_URL` が違う。`docker compose ps` で `postgres` を見る
 - **LocalStack のバージョンを上げるとき**：`01-resources.sh` で使っている `awslocal` は非推奨になっている（2026.10.4 では動く）。上げたあとに動かなければ、`lstk aws` などに書き換える
