@@ -7,3 +7,12 @@ allowBuilds:
   # Prisma の CLI とエンジン。エンジンは、最初に使うときに CLI がダウンロードする
   '@prisma/engines': false
   prisma: false
+  # Next.js が使う（画像の変換・import の解決）。どちらもインストール時のスクリプトは動かさない
+  sharp: false
+  unrs-resolver: false
+
+# eslint-config-next の中の3つ（react・jsx-a11y・import）は、まだ ESLint 10 を対応の範囲に書いていない
+# 動くことは確かめたので、警告だけを止める
+peerDependencyRules:
+  allowedVersions:
+    eslint: '10'

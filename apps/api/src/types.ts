@@ -10,5 +10,6 @@ export type AppEnv = {
 // アプリの組み立てに外から渡すもの（テストでは偽物に差し替える）
 export type AppDeps = {
   logger: Logger;
+  webOrigin: string;
   readinessChecks: readonly ReadinessCheck[];
 };

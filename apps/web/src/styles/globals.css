@@ -1,0 +1,74 @@
+/* 全部の画面の土台：リセット・CSS 変数（色・余白・文字・角丸）・ダークモード */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+figure {
+  margin: 0;
+}
+
+:root {
+  color-scheme: light dark;
+
+  --color-bg: #ffffff;
+  --color-surface: #f6f8fa;
+  --color-text: #1f2328;
+  --color-muted: #59636e;
+  --color-border: #d1d9e0;
+  --color-primary: #0969da;
+  --color-success: #1a7f37;
+  --color-danger: #cf222e;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
+
+/* OS の設定がダークモードのとき。色だけを入れ替え、余白や文字の大きさはそのまま */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0d1117;
+    --color-surface: #151b23;
+    --color-text: #e6edf3;
+    --color-muted: #9198a1;
+    --color-border: #3d444d;
+    --color-primary: #4493f8;
+    --color-success: #3fb950;
+    --color-danger: #f85149;
+  }
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  line-height: 1.7;
+}
+
+a {
+  color: var(--color-primary);
+}

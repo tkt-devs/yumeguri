@@ -47,6 +47,17 @@ aws --profile localstack s3 ls
 aws --profile localstack sqs list-queues
 ```
 
+## API と画面を起動する
+
+| アプリ | 環境変数のファイル | 起動 | 場所 |
+| --- | --- | --- | --- |
+| API（`apps/api`） | `apps/api/.env`（`cp apps/api/.env.example apps/api/.env` して `DATABASE_URL` を入れる） | `pnpm --filter @yumeguri/api dev` | `http://localhost:3001` |
+| 画面（`apps/web`） | `apps/web/.env.local`（`cp apps/web/.env.example apps/web/.env.local`） | `pnpm --filter @yumeguri/web dev` | `http://localhost:3000` |
+
+- 画面のトップに「API の状態：つながっています（API・DB）」が出れば、画面 → API → DB までつながっている（S1-08 の確認用の表示。あとで消す）
+- 「つながりません」のとき：API が起動しているか、`apps/api/.env` の `WEB_ORIGIN` が `http://localhost:3000`（最後に `/` を付けない）か、`apps/web/.env.local` の `NEXT_PUBLIC_API_URL` が `http://localhost:3001` かを見る。ブラウザの開発者ツールのコンソールに CORS のエラーが出ていれば、`WEB_ORIGIN` が違う
+- `apps/web/.env.local` の `NEXT_PUBLIC_` で始まる値はブラウザに送られるので、秘密の値を書かない
+
 ## DB の表を作る・やり直す（Prisma）
 
 表の形は `prisma/schema.prisma`、作った SQL は `prisma/migrations/`。Prisma のコマンドは、リポジトリのいちばん上で、マイグレーション用のユーザー（`.env` の `MIGRATE_DATABASE_URL`）として DB につなぐ。API はアプリ用のユーザー（`apps/api/.env` の `DATABASE_URL`）でつなぐ。

@@ -12,6 +12,7 @@ const logger = createLogger(env.LOG_LEVEL);
 const prisma = createPrismaClient(env.DATABASE_URL);
 const app = createApp({
   logger,
+  webOrigin: env.WEB_ORIGIN,
   readinessChecks: [{ name: 'db', check: () => pingDatabase(prisma) }],
 });
 
