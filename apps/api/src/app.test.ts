@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CORRELATION_ID_HEADER, createApp } from './app';
+import { CORRELATION_ID_HEADER } from '@yumeguri/shared';
+import { createApp } from './app';
 import { createLogger } from './logger';
 import { READINESS_CHECK_TIMEOUT_MS, type ReadinessCheck } from './services/readiness';
+
+const WEB_ORIGIN = 'http://localhost:3000';
 
 // ログを標準出力ではなく配列に入れて、中身を確かめる
 function setup(readinessChecks: ReadinessCheck[] = []) {
   const logs: unknown[] = [];
   const logger = createLogger('info', { write: (line) => logs.push(JSON.parse(line)) });
-  const app = createApp({ logger, readinessChecks });
+  const app = createApp({ logger, webOrigin: WEB_ORIGIN, readinessChecks });
   return { app, logs };
 }
 
@@ -141,5 +144,21 @@ describe('相関 ID', () => {
     const { app, logs } = setup();
     await app.request('/healthz?t=qr-token-value');
     expect(JSON.stringify(logs)).not.toContain('qr-token-value');
+  });
+});
+
+describe('CORS', () => {
+  it('画面（WEB_ORIGIN）からの呼び出しを、Cookie 付きで許可する', async () => {
+    const { app } = setup();
+    const res = await app.request('/healthz', { headers: { Origin: WEB_ORIGIN } });
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(WEB_ORIGIN);
+    expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(res.headers.get('Access-Control-Expose-Headers')).toContain(CORRELATION_ID_HEADER);
+  });
+
+  it('ほかの場所からの呼び出しは、許可しない', async () => {
+    const { app } = setup();
+    const res = await app.request('/healthz', { headers: { Origin: 'https://evil.example' } });
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 });

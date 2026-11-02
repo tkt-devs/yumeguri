@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// 相関 ID のヘッダーの名前（docs/api.md）。API が受け取り・返し、画面がエラーのときに表示する
+export const CORRELATION_ID_HEADER = 'X-Correlation-Id';
+
 // エラーコードの一覧（docs/api.md）。画面はこの code を見て表示を変える
 export const ERROR_CODES = [
   'AUTH_REQUIRED',

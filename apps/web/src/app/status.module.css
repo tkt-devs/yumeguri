@@ -1,0 +1,19 @@
+/* 404・エラー・読み込み中の画面で共通の見た目 */
+.page {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.button {
+  justify-self: start;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
