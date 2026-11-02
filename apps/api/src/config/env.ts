@@ -6,6 +6,8 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'staging', 'production']),
   PORT: z.coerce.number().int().positive().default(3001),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  // アプリ用の DB ユーザー（yumeguri_app）でつなぐ。表を作ったり消したりはできない
+  DATABASE_URL: z.url(),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

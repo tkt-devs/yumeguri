@@ -2,13 +2,18 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { loadEnv } from './config/env';
 import { createLogger } from './logger';
+import { createPrismaClient, pingDatabase } from './repositories/prismaClient';
 
 // ECS は SIGTERM を送ってから 30 秒で強制的に止める。その前に自分で止まる
 const SHUTDOWN_TIMEOUT_MS = 25_000;
 
 const env = loadEnv();
 const logger = createLogger(env.LOG_LEVEL);
-const app = createApp({ logger, readinessChecks: [] });
+const prisma = createPrismaClient(env.DATABASE_URL);
+const app = createApp({
+  logger,
+  readinessChecks: [{ name: 'db', check: () => pingDatabase(prisma) }],
+});
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   logger.info({ port: info.port }, 'server started');
@@ -26,7 +31,8 @@ function shutdown(signal: NodeJS.Signals) {
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS).unref();
   server.close((err) => {
-    process.exit(err ? 1 : 0);
+    // 処理中のリクエストが終わってから、DB との接続を閉じる
+    void prisma.$disconnect().finally(() => process.exit(err ? 1 : 0));
   });
 }
 
