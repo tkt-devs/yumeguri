@@ -1,3 +1,6 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+allowBuilds:
+  # tsx が使う。インストール時のスクリプトは、バイナリの確認だけなので動かさない
+  esbuild: false
