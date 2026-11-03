@@ -12,6 +12,10 @@ const EnvSchema = z.object({
   WEB_ORIGIN: z.url().refine((value) => new URL(value).origin === value, {
     message: 'http(s)://ホスト名（:ポート）の形にする（パスや最後の / を付けない）',
   }),
+  // ジョブのキューの URL（Terraform・ローカルは LocalStack の init のスクリプトが作る）
+  // SQS の接続先と認証は、AWS の SDK が自分で決める（ローカルは AWS_PROFILE=localstack、本番は ECS のタスクロール）
+  SQS_QUEUE_URL_DEFAULT: z.url(),
+  SQS_QUEUE_URL_HEAVY: z.url(),
 });
 export type Env = z.infer<typeof EnvSchema>;
 
