@@ -73,6 +73,7 @@ def create_celery_app(settings: Settings) -> Celery:
         # 別のワーカーにも渡ってしまう
         worker_prefetch_multiplier=1,
         worker_pool=settings.celery_pool,
+        worker_concurrency=settings.celery_concurrency,
         task_soft_time_limit=DEFAULT_SOFT_TIME_LIMIT_SECONDS,
         task_time_limit=DEFAULT_TIME_LIMIT_SECONDS,
         include=["app.tasks.debug"],

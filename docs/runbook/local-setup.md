@@ -72,7 +72,7 @@ cp .env.example .env
 
 ```bash
 cd services/worker
-uv run --env-file .env celery -A app.celery_app worker -Q jobs-default,jobs-heavy
+uv run --env-file .env celery -A app.celery_app worker
 ```
 
 ```bash
@@ -91,6 +91,29 @@ pnpm --filter @yumeguri/api enqueue:debug-add 2 3
 - `.env` の `CELERY_POOL=solo`：Mac では Celery の初期の `prefork` が動かない（子プロセスの作り方が違う）ので、1つのプロセスで順に実行する。`solo` では時間の上限が効かない。本番の Linux のコンテナは `prefork`
 - コードを変えても、ワーカーは自動で再起動しない。`Ctrl+C` で止めて、起動し直す
 - `Ctrl+C` で止めたときに受け取っていたメッセージは、キューの可視性タイムアウト（`jobs-default` は120秒）が過ぎてから、もう一度届く
+
+## 全部を箱（コンテナ）で起動する
+
+本番（ECS）で動かすのと同じイメージで、API・ワーカーも Docker で動かす（`docker-compose.yml` の `full` のプロファイル）。イメージは ARM（`linux/arm64`）向け（ADR-002）。Apple シリコンの Mac では、そのままビルドすると ARM になる。
+
+```bash
+docker compose --profile full up -d --build
+docker compose --profile full ps    # api・worker-api が (healthy) になれば使える
+curl -s localhost:3001/readyz       # {"status":"ok"}
+curl -s localhost:8000/internal/healthz
+docker images | grep yumeguri       # イメージの大きさ
+```
+
+| サービス | イメージ | Mac からの接続先 |
+| --- | --- | --- |
+| `api` | `apps/api/Dockerfile`（API を1つのファイルにまとめて、Node だけの箱に入れる） | `http://localhost:3001` |
+| `worker` | `services/worker/Dockerfile`（Celery。Linux なので `prefork`） | なし |
+| `worker-api` | `worker` と同じイメージで `python -m app.api` | `http://localhost:8000` |
+
+- `pnpm --filter @yumeguri/api dev` や、`uv run … celery …` と同じポートを使うので、同時には起動しない。箱の API・ワーカーだけを止めるときは `docker compose --profile full stop api worker worker-api`
+- 箱の中からは、`localhost` ではなく、サービスの名前（`postgres:5432`・`aws:4566`）でつなぐ。接続先と、ダミーの鍵は `docker-compose.yml` に書いてある
+- コードを変えたら、`--build` を付けて起動し直す（イメージを作り直す）
+- 1つのイメージだけを作るとき：`docker buildx build --platform linux/arm64 -t yumeguri-api:local -f apps/api/Dockerfile .`・`docker buildx build --platform linux/arm64 -t yumeguri-worker:local services/worker`
 
 ## DB の表を作る・やり直す（Prisma）
 
@@ -138,4 +161,6 @@ DB を空からやり直すときは、`docker compose down -v` → `docker comp
 - **ワーカーで `ValueError: not enough values to unpack (expected 3, got 0)`**：`services/worker/.env` に `CELERY_POOL=solo` がない（Mac）
 - **ワーカーで `UndefinedQueueException`**：`-Q` に `jobs-default`・`jobs-heavy` 以外のキューを書いている
 - **ワーカーがメッセージを受け取らない**：`services/worker/.env` の `AWS_PROFILE=localstack` と、キューの URL を見る。`aws --profile localstack sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/jobs-default --attribute-names All` で、メッセージがたまっているか見る
+- **`docker compose --profile full up` で `port is already allocated`（3001・8000）**：`pnpm dev` の API や、`uv run` の内部の API が起動している。止めてから起動する
+- **箱の API の `/readyz` が 503**：DB の表がまだない（`pnpm exec prisma migrate dev`）か、`postgres` が起動していない
 - **LocalStack のバージョンを上げるとき**：`01-resources.sh` で使っている `awslocal` は非推奨になっている（2026.10.4 では動く）。上げたあとに動かなければ、`lstk aws` などに書き換える

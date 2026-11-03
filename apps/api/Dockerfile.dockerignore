@@ -1,0 +1,22 @@
+# API のイメージ（apps/api/Dockerfile）を作るときだけ使う、箱に送らないもの
+# （Dockerfile と同じ名前 ＋ .dockerignore にすると、その Dockerfile だけに効く）
+# 今の Dockerfile が COPY しない場所も、あとで COPY を広げたときに入らないように書いておく
+
+# 秘密の値
+**/.env
+**/.env.*
+!**/.env.example
+
+# 手元で作ったもの（箱の中で作り直す）
+**/node_modules
+**/dist
+**/.next
+**/generated
+.git
+
+# API に関係ないもの
+apps/web
+services
+docs
+infra
+**/*.test.ts

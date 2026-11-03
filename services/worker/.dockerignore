@@ -1,0 +1,16 @@
+# ワーカーのイメージ（services/worker/Dockerfile）を作るときに、箱に送らないもの
+
+# 秘密の値
+.env
+.env.*
+!.env.example
+
+# 手元で作ったもの（箱の中で作り直す）
+.venv
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# 動かすのに要らないもの
+tests
