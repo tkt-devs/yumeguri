@@ -30,6 +30,21 @@ enum PlatformRoleName {
   platform_admin
 }
 
+// 公開ページに出るのは published だけ
+enum StoreStatus {
+  draft
+  published
+  closed
+}
+
+// アップロード中 → 加工中（ワーカー） → 準備完了 / 失敗
+enum PhotoStatus {
+  uploading
+  processing
+  ready
+  failed
+}
+
 // 利用者
 model User {
   id          String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
@@ -92,6 +107,7 @@ model Organization {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   memberships Membership[]
+  stores      Store[]
 }
 
 // 団体・銭湯での役割
@@ -99,7 +115,7 @@ model Membership {
   id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
   userId         String         @map("user_id") @db.Uuid
   organizationId String         @map("organization_id") @db.Uuid
-  // 団体の管理者は NULL。Store への外部キーは、Store を作る S2-01 で足す
+  // 団体の管理者は NULL
   storeId        String?        @map("store_id") @db.Uuid
   role           MembershipRole
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -107,6 +123,9 @@ model Membership {
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id])
+  // 複合外部キー：「A 団体の役割なのに、B 団体の銭湯を指す」行を DB が受け付けない
+  // 銭湯を消すときに役割が残っていれば断る（Prisma の初期の SetNull だと、organization_id まで NULL にしようとする）
+  store        Store?       @relation(fields: [storeId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   // 実際の一意の制約は、NULLS NOT DISTINCT 付きで SQL のマイグレーションが作る
   // （ここに書いておかないと、Prisma が「スキーマにない索引」として消そうとする）
@@ -145,4 +164,70 @@ model AuditLog {
 
   @@index([organizationId, createdAt])
   @@index([targetType, targetId])
+}
+
+// 銭湯。どれか1つの団体に属する（テナントの境界の起点）
+model Store {
+  id             String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  slug           String      @unique
+  name           String
+  // わざと NULL を許す（v0.2 で「任意 → 必須」を無停止で変える練習をする。要件定義書 9.5）
+  nameKana       String?     @map("name_kana")
+  description    String?
+  // 例：{"adult": 520, "child": 200}
+  prices         Json?
+  status         StoreStatus @default(draft)
+  // 論理削除（消した印。行は残す）
+  deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  businessHours BusinessHour[]
+  photos        Photo[]
+  memberships   Membership[]
+
+  // id だけで一意だが、Membership・Visit の複合外部キーの参照先にするために必要
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+}
+
+// 営業時間。行がない曜日は定休日。同じ曜日に複数の行（朝湯と夕方など）を持てる
+// closes_at が opens_at より小さければ、日付をまたぐ営業（例：15:00〜翌1:00）
+// 曜日の範囲・opens_at <> closes_at の CHECK は SQL のマイグレーションで足す
+model BusinessHour {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  storeId   String   @map("store_id") @db.Uuid
+  // 0（日）〜6（土）
+  weekday   Int      @db.SmallInt
+  opensAt   DateTime @map("opens_at") @db.Time(0)
+  closesAt  DateTime @map("closes_at") @db.Time(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, weekday])
+}
+
+// 写真。ファイルは S3 に置き、ここにはキーだけを持つ（バケット名は環境ごとの設定）
+// 「準備完了ならサムネイルがある」の CHECK と、ワーカーの権限は SQL のマイグレーションで足す
+model Photo {
+  id           String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  storeId      String      @map("store_id") @db.Uuid
+  // 非公開のバケットの、アップロードされた元のファイル
+  originalKey  String      @map("original_key")
+  // 公開用のバケットの、加工後のファイル。加工が終わるまで NULL
+  thumbnailKey String?     @map("thumbnail_key")
+  status       PhotoStatus @default(uploading)
+  sortOrder    Int         @default(0) @map("sort_order")
+  width        Int?
+  height       Int?
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, sortOrder])
 }

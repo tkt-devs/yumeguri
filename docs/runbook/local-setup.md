@@ -123,8 +123,8 @@ docker images | grep yumeguri       # イメージの大きさ
 | --- | --- | --- |
 | `pnpm exec prisma migrate dev` | まだ実行していないマイグレーションを実行する。`schema.prisma` を変えていれば、差分の SQL を作ってから実行する（`--name <名前>` を付ける） | 最初の1回・表を変えたとき・`main` を取り込んだとき |
 | `pnpm exec prisma migrate dev --create-only --name <名前>` | 空のマイグレーションを作るだけ（実行しない） | Prisma で書けない制約・権限を、SQL で手で書くとき |
-| `pnpm exec prisma db seed` | 架空のデータ（団体3つ・システム管理者1人）を入れる。何回実行しても同じ結果になる | 表を作ったあと |
-| `pnpm exec prisma generate` | API が使う Prisma Client を `apps/api/src/generated/prisma` に作る（Git に入らない）。初めての `pnpm install` や、依存が変わった `pnpm install` のあとには自動で実行される（`Already up to date` のときは実行されない） | `schema.prisma` を変えたとき・`main` を取り込んだとき |
+| `pnpm exec prisma db seed` | 架空のデータ（団体3つ・システム管理者1人・銭湯10軒と営業時間）を入れる。何回実行しても同じ結果になる | 表を作ったあと |
+| `pnpm exec prisma generate` | API が使う Prisma Client を `apps/api/src/generated/prisma` に作る（Git に入らない）。初めての `pnpm install` や、依存が変わった `pnpm install` のあとには自動で実行される（`Already up to date` のときは実行されない） | `schema.prisma` を変えたとき（Prisma 7 の `migrate dev` は作り直さないので、そのあとに必ず実行する）・`main` を取り込んだとき |
 | `pnpm exec prisma migrate status` | どこまで実行したかを見る | 迷ったとき |
 
 DB を空からやり直すときは、`docker compose down -v` → `docker compose up -d` → `pnpm exec prisma migrate dev` → `pnpm exec prisma db seed`。
