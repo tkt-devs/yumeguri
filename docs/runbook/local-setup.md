@@ -51,12 +51,46 @@ aws --profile localstack sqs list-queues
 
 | アプリ | 環境変数のファイル | 起動 | 場所 |
 | --- | --- | --- | --- |
-| API（`apps/api`） | `apps/api/.env`（`cp apps/api/.env.example apps/api/.env` して `DATABASE_URL` を入れる） | `pnpm --filter @yumeguri/api dev` | `http://localhost:3001` |
+| API（`apps/api`） | `apps/api/.env`（`cp apps/api/.env.example apps/api/.env` して `DATABASE_URL` を入れる。SQS の値は `.env.example` のままでよい） | `pnpm --filter @yumeguri/api dev` | `http://localhost:3001` |
 | 画面（`apps/web`） | `apps/web/.env.local`（`cp apps/web/.env.example apps/web/.env.local`） | `pnpm --filter @yumeguri/web dev` | `http://localhost:3000` |
 
 - 画面のトップに「API の状態：つながっています（API・DB）」が出れば、画面 → API → DB までつながっている（S1-08 の確認用の表示。あとで消す）
 - 「つながりません」のとき：API が起動しているか、`apps/api/.env` の `WEB_ORIGIN` が `http://localhost:3000`（最後に `/` を付けない）か、`apps/web/.env.local` の `NEXT_PUBLIC_API_URL` が `http://localhost:3001` かを見る。ブラウザの開発者ツールのコンソールに CORS のエラーが出ていれば、`WEB_ORIGIN` が違う
 - `apps/web/.env.local` の `NEXT_PUBLIC_` で始まる値はブラウザに送られるので、秘密の値を書かない
+
+## ワーカーを起動する（Python・Celery）
+
+初めてのときだけ、`services/worker` で部品を入れて、`.env` を作る（`uv` は Homebrew で入れる：`brew install uv`）。
+
+```bash
+cd services/worker
+uv sync
+cp .env.example .env
+```
+
+ワーカー（キューを見張る）と、内部の API（FastAPI）は、別々のターミナルで起動する。
+
+```bash
+cd services/worker
+uv run --env-file .env celery -A app.celery_app worker -Q jobs-default,jobs-heavy
+```
+
+```bash
+cd services/worker
+uv run --env-file .env python -m app.api    # http://localhost:8000/internal/healthz
+```
+
+API 側から、確かめ用のタスク（2つの数を足すだけ）をキューに入れる（リポジトリのいちばん上で）。
+
+```bash
+pnpm --filter @yumeguri/api enqueue:debug-add 2 3
+```
+
+ワーカーのログに `Task debug.add[…] received` → `"msg": "debug.add", … "result": 5` → `succeeded` が出れば、API → SQS → ワーカーまでつながっている。API の `job enqueued` のログと、ワーカーのログの `correlationId` が同じになる。
+
+- `.env` の `CELERY_POOL=solo`：Mac では Celery の初期の `prefork` が動かない（子プロセスの作り方が違う）ので、1つのプロセスで順に実行する。`solo` では時間の上限が効かない。本番の Linux のコンテナは `prefork`
+- コードを変えても、ワーカーは自動で再起動しない。`Ctrl+C` で止めて、起動し直す
+- `Ctrl+C` で止めたときに受け取っていたメッセージは、キューの可視性タイムアウト（`jobs-default` は120秒）が過ぎてから、もう一度届く
 
 ## DB の表を作る・やり直す（Prisma）
 
@@ -101,4 +135,7 @@ DB を空からやり直すときは、`docker compose down -v` → `docker comp
 - **`The datasource.url property is required`**：いちばん上の `.env` に `MIGRATE_DATABASE_URL` がない
 - **API の型チェックで `Cannot find module '../generated/prisma/client'`**：Prisma Client がまだない。`pnpm exec prisma generate`
 - **`/readyz` が 503 で、ログに `"failed":["db"]`**：DB が止まっているか、`apps/api/.env` の `DATABASE_URL` が違う。`docker compose ps` で `postgres` を見る
+- **ワーカーで `ValueError: not enough values to unpack (expected 3, got 0)`**：`services/worker/.env` に `CELERY_POOL=solo` がない（Mac）
+- **ワーカーで `UndefinedQueueException`**：`-Q` に `jobs-default`・`jobs-heavy` 以外のキューを書いている
+- **ワーカーがメッセージを受け取らない**：`services/worker/.env` の `AWS_PROFILE=localstack` と、キューの URL を見る。`aws --profile localstack sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/jobs-default --attribute-names All` で、メッセージがたまっているか見る
 - **LocalStack のバージョンを上げるとき**：`01-resources.sh` で使っている `awslocal` は非推奨になっている（2026.10.4 では動く）。上げたあとに動かなければ、`lstk aws` などに書き換える

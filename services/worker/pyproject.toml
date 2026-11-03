@@ -1,0 +1,44 @@
+[project]
+name = "yumeguri-worker"
+version = "0.0.0"
+description = "ゆめぐりの非同期ジョブ（Celery・SQS）と、運用のための内部 API（FastAPI）"
+# Celery が対応を明記しているのは 3.13 まで
+requires-python = "==3.13.*"
+dependencies = [
+    "celery[sqs]==5.6.3",
+    "fastapi==0.162.0",
+    "pydantic-settings==2.16.2",
+    "python-json-logger==4.2.0",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "celery-types==0.26.0",
+    "httpx2==2.16.0",
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+    "ruff==0.17.3",
+]
+
+[tool.uv]
+# ライブラリとして配らないので、ビルドしない（app/ をそのまま import する）
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# E・W：PEP 8、F：使っていないもの、I：import の並び、B：よくある不具合、UP：古い書き方、N：名前の付け方
+select = ["E", "W", "F", "I", "B", "UP", "N"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+# pydantic の Settings（app/config.py）の型を、mypy に正しく分からせる
+plugins = ["pydantic.mypy"]
+files = ["app", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

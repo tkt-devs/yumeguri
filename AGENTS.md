@@ -16,7 +16,7 @@ apps/
 ├── web/        # 画面（Next.js、Vercel）        → apps/web/AGENTS.md
 └── api/        # API（Hono、Node.js、ECS）     → apps/api/AGENTS.md
 services/
-└── worker/     # 非同期ジョブ（Python、FastAPI、Celery、SQS）
+└── worker/     # 非同期ジョブ（Python、FastAPI、Celery、SQS） → services/worker/AGENTS.md
 packages/
 └── shared/     # 画面と API で共有する Zod スキーマ・エラーコード・型
 prisma/         # DB のスキーマ・マイグレーション・シード
@@ -248,4 +248,4 @@ class StoreImporter:
 - [ ] コメントが日本語で書かれている
 - [ ] PEP 8 に従っている
 
-ワーカーに固有の規約（Celery・SQS・ジョブの状態の扱い）は、S1-09 で `services/worker/AGENTS.md` に足す。
+ワーカーに固有の規約（Celery・SQS・タスクの書き方）は `services/worker/AGENTS.md`。

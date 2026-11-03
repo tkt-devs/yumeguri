@@ -5,7 +5,15 @@ import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  globalIgnores(['**/dist/', '**/build/', '**/.next/', '**/coverage/', '**/generated/']),
+  globalIgnores([
+    '**/dist/',
+    '**/build/',
+    '**/.next/',
+    '**/coverage/',
+    '**/generated/',
+    // Python の部品（services/worker の uv の仮想環境）の中の JS
+    '**/.venv/',
+  ]),
   js.configs.recommended,
   tseslint.configs.recommended,
   {
