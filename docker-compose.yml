@@ -1,3 +1,13 @@
+# full のプロファイルの3つで使う、SQS（LocalStack）の接続先
+# 鍵はダミー（本物の AWS には届かない）。本番は ECS のタスクロールで、本物の SQS につながる
+x-sqs-env: &sqs-env
+  AWS_ENDPOINT_URL: http://aws:4566
+  AWS_REGION: ap-northeast-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  SQS_QUEUE_URL_DEFAULT: http://aws:4566/000000000000/jobs-default
+  SQS_QUEUE_URL_HEAVY: http://aws:4566/000000000000/jobs-heavy
+
 services:
   postgres:
     image: postgres:18
@@ -35,6 +45,77 @@ services:
       - '127.0.0.1:4566:4566'
     volumes:
       - ./docker/localstack/init:/etc/localstack/init/ready.d:ro
+    # 起動しただけでなく、init のスクリプト（バケット・キューを作る）が終わってから healthy にする
+    # （full のプロファイルの API・ワーカーが、キューができる前に動き出さないように）
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python3',
+          '-c',
+          "import json, sys, urllib.request; r = urllib.request.urlopen('http://localhost:4566/_localstack/init/ready', timeout=3); sys.exit(0 if json.load(r)['completed'] else 1)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # ---- ここから下は「full」のプロファイル：API・ワーカーも箱で動かす（S1-10） ----
+  # docker compose --profile full up -d --build で起動する。ふだんの docker compose up では起動しない
+  # 箱の中からは、localhost ではなく、サービスの名前（postgres・aws）でつなぐ
+  # pnpm dev の API と同じポート（3001・8000）を使うので、同時には起動しない
+  api:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: yumeguri-api:local
+    environment:
+      DATABASE_URL: postgresql://yumeguri_app:app_local@postgres:5432/yumeguri
+      WEB_ORIGIN: http://localhost:3000
+      <<: *sqs-env
+    ports:
+      - '127.0.0.1:3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      aws:
+        condition: service_healthy
+
+  # Celery のワーカー（Linux なので prefork で動く）
+  worker:
+    profiles: [full]
+    build: services/worker
+    image: yumeguri-worker:local
+    environment:
+      <<: *sqs-env
+    depends_on:
+      aws:
+        condition: service_healthy
+
+  # ワーカーの内部の API（FastAPI）。同じイメージで、起動するものだけを変える
+  worker-api:
+    profiles: [full]
+    build: services/worker
+    image: yumeguri-worker:local
+    command: ['python', '-m', 'app.api']
+    environment:
+      # 箱の中では、外（Mac）からつながるように、すべての窓口で待ち受ける
+      INTERNAL_API_HOST: 0.0.0.0
+      <<: *sqs-env
+    ports:
+      - '127.0.0.1:8000:8000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/internal/healthz', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   pgdata:

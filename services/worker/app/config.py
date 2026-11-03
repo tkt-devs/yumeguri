@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import HttpUrl
+from pydantic import Field, HttpUrl
 from pydantic_settings import BaseSettings
 
 
@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Mac では prefork が動かない（子プロセスを spawn で作るため）ので、
     # ローカルの .env で solo にする
     celery_pool: Literal["prefork", "solo"] = "prefork"
+    # prefork の子プロセスの数（同時に実行するジョブの数）。指定しないと CPU の数になり、
+    # 小さい Fargate のタスクでもメモリを使いすぎるので、決めておく（タスクの大きさは S1-15）
+    celery_concurrency: int = Field(default=2, ge=1)
     # 内部の API（FastAPI）の待ち受け。ローカルは自分の Mac からだけ
     # コンテナでは 0.0.0.0 にする（S1-10）
     internal_api_host: str = "127.0.0.1"
