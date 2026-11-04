@@ -88,3 +88,8 @@ updates:
     ignore:
       - dependency-name: node
         update-types: [version-update:semver-major]
+      # python のイメージは 3.13 で動かすと決めている（services/worker/.python-version・pyproject.toml。
+      # Celery が対応を明記しているのが 3.13 まで）。Docker の版では 3.13 → 3.14 は中くらいの更新に
+      # 当たるので、それも止める。3.13.x の修正は、python:3.13-slim-trixie を作り直すたびに入る
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
