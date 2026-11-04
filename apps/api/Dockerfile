@@ -3,7 +3,7 @@
 #   docker buildx build --platform linux/arm64 -t yumeguri-api:local -f apps/api/Dockerfile .
 
 # ---- 1段目：部品を入れて、API を1つのファイル（dist/index.js）にまとめる ----
-FROM node:24-trixie-slim AS build
+FROM node:25-trixie-slim AS build
 # pnpm の版は、ここでは 11 系とだけ決める。細かい版は package.json の devEngines と
 # pnpm-lock.yaml に合わせて、pnpm が自分で取ってくる（手元・CI と同じ版になる）
 RUN npm install -g pnpm@11
@@ -32,7 +32,7 @@ RUN pnpm --filter @yumeguri/api build
 
 # ---- 2段目：動かすのに必要なもの（まとめた1ファイル）だけを持っていく ----
 # pnpm・TypeScript・node_modules は入らないので、小さく、攻撃に使える道具も少ない
-FROM node:24-trixie-slim AS runtime
+FROM node:25-trixie-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/api/dist ./dist
