@@ -1,0 +1,27 @@
+# Node・pnpm を用意して、部品を入れる（ci.yml の TypeScript と結合テストのジョブで使う）
+# 使う前に actions/checkout でリポジトリを取ってくること
+name: Node・pnpm の用意
+description: mise.toml の版の Node・pnpm を入れ、pnpm の置き場所をキャッシュして、部品を入れる
+inputs:
+  install-args:
+    description: pnpm install に足す引数（入れる範囲を絞るときの --filter など）
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    # Node・pnpm の版は mise.toml から（手元と同じ版になる）
+    - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+    - name: pnpm の置き場所を調べる
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-
+    # postinstall で prisma generate も動く
+    - name: 部品を入れる
+      shell: bash
+      run: pnpm install --frozen-lockfile ${{ inputs.install-args }}

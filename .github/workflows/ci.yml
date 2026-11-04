@@ -1,0 +1,127 @@
+# CI：PR と main への push のたびに、検査・テスト・ビルドを走らせる（S1-11）
+# ここのジョブが全部通らないと、main にマージできない（GitHub の ruleset で必須にしている）
+# Terraform のジョブ（fmt -check・validate）は、Terraform のファイルを作る S1-12 で足す
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# PR から読めるのは、リポジトリの中身だけ（書き込み・シークレットの権限を渡さない）
+permissions:
+  contents: read
+
+# 同じ PR に新しく push したら、古い実行は止める（main は止めない）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# 使う部品（action）は、版の番号ではなく、中身のコミットの SHA で固定する（番号は差し替えられるため）
+# 横のコメントが、その SHA の版。版を上げるのは Dependabot の PR で行う
+
+jobs:
+  typescript:
+    name: TypeScript（Lint・型・テスト・ビルド）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-pnpm
+      # 速く終わるものから順に（失敗する PR が早く止まるように）
+      - run: pnpm format:check
+      # 使っている部品に、重大（high 以上）な脆弱性があれば止める
+      - run: pnpm audit --audit-level high
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+        env:
+          # 画面のビルドで使う（ブラウザに送る値。秘密ではない）
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+
+  python:
+    name: Python（ruff・mypy・pytest）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/worker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        # uv の版は services/worker/pyproject.toml の required-version から読む
+        with:
+          working-directory: services/worker
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # Python の版は .python-version（3.13）から、uv が用意する
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check app tests
+      - run: uv run --frozen ruff format --check app tests
+      - run: uv run --frozen mypy
+      - run: uv run --frozen pytest
+
+  integration:
+    name: 結合テスト（PostgreSQL）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # 本物の PostgreSQL を、ジョブの横で起動する（サービスコンテナ）
+    # Valkey・LocalStack は、使うテストができたら足す（LocalStack は auth token が要る。S3-01）
+    services:
+      postgres:
+        # docker-compose.yml の postgres と同じ版にする
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: yumeguri
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d yumeguri"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # CI の中だけの、使い捨ての DB のパスワード（docker/postgres/init/01-roles.sql と同じ）
+      MIGRATE_DATABASE_URL: postgresql://yumeguri_migrator:migrator_local@localhost:5432/yumeguri
+      DATABASE_URL: postgresql://yumeguri_app:app_local@localhost:5432/yumeguri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # いちばん上（Prisma の CLI）と、API とそれが使うものだけを入れる（画面の部品は入れない）
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --filter yumeguri --filter @yumeguri/api...
+      # DB のユーザーを作る。サービスコンテナはリポジトリのファイルを読めないので、ここで流し込む
+      # （staging・本番の RDS でも、同じ SQL を最初に一度だけ実行する。docs/runbook/local-setup.md）
+      - name: DB のユーザーを作る
+        run: psql "postgresql://postgres:postgres@localhost:5432/yumeguri" -v ON_ERROR_STOP=1 -f docker/postgres/init/01-roles.sql
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm --filter @yumeguri/api test:integration
+
+  images:
+    name: イメージ（API・ワーカー、ARM）
+    # 本番（ECS Fargate）と同じ ARM の計算機で作る（ADR-002）
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # 作れることを確かめるだけ（どこにも送らない）。前の結果を GitHub のキャッシュから使って速くする
+      # キャッシュに書くのは main だけ（PR のキャッシュは、ほかの PR から使えず、容量だけを使うため）
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=api,mode=max' || '' }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/worker
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=worker
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=worker,mode=max' || '' }}
