@@ -33,6 +33,16 @@ async function inRolledBackTransaction(
     });
 }
 
+// 団体・その銭湯・利用者を1つずつ作る
+async function createOrgStoreAndUser(tx: Prisma.TransactionClient) {
+  const org = await tx.organization.create({ data: { name: 'テスト A', slug: 'test-a' } });
+  const store = await tx.store.create({
+    data: { organizationId: org.id, slug: 'test-a-store', name: 'テストの湯' },
+  });
+  const user = await tx.user.create({ data: { displayName: 'テストの人' } });
+  return { org, store, user };
+}
+
 describe('DB（本物の PostgreSQL）', () => {
   it('アプリ用の DB ユーザーで問い合わせができる（/readyz の中身）', async () => {
     await expect(pingDatabase(prisma)).resolves.toBeUndefined();
@@ -40,12 +50,8 @@ describe('DB（本物の PostgreSQL）', () => {
 
   it('Membership：団体が食い違う「役割と銭湯」は、複合外部キーが断る', async () => {
     const attempt = inRolledBackTransaction(async (tx) => {
-      const orgA = await tx.organization.create({ data: { name: 'テスト A', slug: 'test-a' } });
+      const { store: storeOfA, user } = await createOrgStoreAndUser(tx);
       const orgB = await tx.organization.create({ data: { name: 'テスト B', slug: 'test-b' } });
-      const storeOfA = await tx.store.create({
-        data: { organizationId: orgA.id, slug: 'test-a-store', name: 'テストの湯' },
-      });
-      const user = await tx.user.create({ data: { displayName: 'テストの人' } });
 
       // B 団体の役割なのに、A 団体の銭湯を指す
       await tx.membership.create({
@@ -58,11 +64,7 @@ describe('DB（本物の PostgreSQL）', () => {
 
   it('Membership：同じ団体の銭湯なら入る', async () => {
     const attempt = inRolledBackTransaction(async (tx) => {
-      const org = await tx.organization.create({ data: { name: 'テスト A', slug: 'test-a' } });
-      const store = await tx.store.create({
-        data: { organizationId: org.id, slug: 'test-a-store', name: 'テストの湯' },
-      });
-      const user = await tx.user.create({ data: { displayName: 'テストの人' } });
+      const { org, store, user } = await createOrgStoreAndUser(tx);
 
       await tx.membership.create({
         data: { userId: user.id, organizationId: org.id, storeId: store.id, role: 'staff' },
@@ -70,6 +72,69 @@ describe('DB（本物の PostgreSQL）', () => {
     });
 
     await expect(attempt).resolves.toBeUndefined();
+  });
+
+  describe('Visit', () => {
+    // 団体・銭湯・利用者を作り、その人がその銭湯に QR で来た来訪のデータを返す（overrides で一部を変える）
+    async function setUpVisit(
+      tx: Prisma.TransactionClient,
+      overrides: Partial<Prisma.VisitUncheckedCreateInput> = {},
+    ): Promise<Prisma.VisitUncheckedCreateInput> {
+      const { org, store, user } = await createOrgStoreAndUser(tx);
+      return {
+        userId: user.id,
+        storeId: store.id,
+        organizationId: org.id,
+        visitedOn: new Date('2026-11-04'),
+        source: 'qr',
+        ...overrides,
+      };
+    }
+
+    it('同じ人・同じ日・同じ銭湯の2件目は、部分一意インデックスが断る', async () => {
+      const attempt = inRolledBackTransaction(async (tx) => {
+        const visit = await setUpVisit(tx);
+
+        await tx.visit.create({ data: visit });
+        await tx.visit.create({ data: visit });
+      });
+
+      await expect(attempt).rejects.toMatchObject({ code: 'P2002' });
+    });
+
+    it('取り消したあとは、同じ日にもう一度入る', async () => {
+      const attempt = inRolledBackTransaction(async (tx) => {
+        const visit = await setUpVisit(tx);
+
+        const first = await tx.visit.create({ data: visit });
+        await tx.visit.update({ where: { id: first.id }, data: { revokedAt: new Date() } });
+        await tx.visit.create({ data: visit });
+      });
+
+      await expect(attempt).resolves.toBeUndefined();
+    });
+
+    it('団体が食い違う来訪は、複合外部キーが断る', async () => {
+      const attempt = inRolledBackTransaction(async (tx) => {
+        const orgB = await tx.organization.create({ data: { name: 'テスト B', slug: 'test-b' } });
+        // B 団体の来訪なのに、A 団体の銭湯を指す
+        const visit = await setUpVisit(tx, { organizationId: orgB.id });
+
+        await tx.visit.create({ data: visit });
+      });
+
+      await expect(attempt).rejects.toMatchObject({ code: 'P2003' });
+    });
+
+    it('手動の来訪は、付けたスタッフがないと CHECK 制約が断る', async () => {
+      const attempt = inRolledBackTransaction(async (tx) => {
+        const visit = await setUpVisit(tx, { source: 'manual' });
+
+        await tx.visit.create({ data: visit });
+      });
+
+      await expect(attempt).rejects.toThrow(/Visit_manual_has_created_by_check/);
+    });
   });
 
   it('AuditLog：アプリ用の DB ユーザーは、書き換えられない（追記だけ）', async () => {
