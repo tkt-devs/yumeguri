@@ -17,6 +17,12 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    # Node は 24（LTS）で動かすと決めている（mise.toml）。型だけ新しい大きな版にすると、
+    # Node 24 にない機能まで書けてしまうので、大きな版（24 → 25 など）の PR は作らない
+    # Node の版を上げるときは、mise.toml・Dockerfile と一緒に手で上げる
+    ignore:
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
 
   # Python（ワーカー）
   - package-ecosystem: uv
@@ -64,3 +70,7 @@ updates:
       default-days: 7
     commit-message:
       prefix: chore
+    # node のイメージも、大きな版の PR は作らない（上の @types/node と同じ理由。手元と本番で版がずれる）
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
