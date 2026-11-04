@@ -7,7 +7,8 @@
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "enqueue:debug-add": "tsx --env-file-if-exists=.env scripts/enqueue-debug-add.ts"
   },
   "dependencies": {

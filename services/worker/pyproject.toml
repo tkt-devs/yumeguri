@@ -24,6 +24,8 @@ dev = [
 [tool.uv]
 # ライブラリとして配らないので、ビルドしない（app/ をそのまま import する）
 package = false
+# uv の版（手元・CI がそろうように。Dockerfile の ghcr.io/astral-sh/uv の版も同じ範囲にする）
+required-version = ">=0.13.5,<0.14"
 
 [tool.ruff]
 line-length = 100

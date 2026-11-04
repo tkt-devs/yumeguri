@@ -1,0 +1,66 @@
+# Dependabot：部品の新しい版が出たら、更新の PR を自動で作る（S1-11）
+# PR は CI を通してから、自分でマージする（自動ではマージしない）
+# 出たばかりの版は、乗っ取られた版がまれに混ざるので、7日たってから更新する（cooldown）
+# セキュリティの修正は、cooldown を待たずにすぐ PR になる
+version: 2
+updates:
+  # Node（pnpm のワークスペース全体：apps/*・packages/*・いちばん上）
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+    # 大きな版（major）以外は、1つの PR にまとめる（PR が多すぎないように）
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Python（ワーカー）
+  - package-ecosystem: uv
+    directory: /services/worker
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+    groups:
+      uv-minor-and-patch:
+        update-types: [minor, patch]
+
+  # GitHub Actions の部品（ci.yml の SHA とコメントの版を一緒に更新する）
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
+
+  # docker-compose.yml のイメージ（postgres・valkey・LocalStack）
+  # ci.yml の結合テストの postgres の版も、これに合わせて手で上げる
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+
+  # Docker のベースのイメージ（node・python・uv）
+  - package-ecosystem: docker
+    directories: [/apps/api, /services/worker]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore

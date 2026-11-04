@@ -133,6 +133,30 @@ DB を空からやり直すときは、`docker compose down -v` → `docker comp
 - マイグレーションは、DB のユーザー（`yumeguri_app`・`yumeguri_worker`）の権限を変える。なので、**ユーザーがない DB では失敗する**。ローカルは `01-roles.sql` が先に作る。staging・本番の RDS では、同じ内容の SQL を最初に一度だけ実行してから、`prisma migrate deploy` を実行する
 - Prisma の 8 は、まだ試験版（RC）なので上げない（`Update available … 8.0.0-rc` の表示は無視する）
 
+## 結合テスト（本物の DB を使うテスト）
+
+ふつうのテスト（`pnpm test`）は DB を使わない。DB の制約・権限を確かめる結合テスト（`*.int.test.ts`）は、別のコマンドで動かす。`postgres` を起動して、マイグレーションを流してから実行する。
+
+```bash
+pnpm --filter @yumeguri/api test:integration   # apps/api/.env の DATABASE_URL（アプリ用のユーザー）でつなぐ
+```
+
+テストで入れたデータは、トランザクションごと取り消すので、DB に残らない。
+
+## CI（GitHub Actions）
+
+PR と `main` への push のたびに、`.github/workflows/ci.yml` が4つのジョブを走らせる。全部が通らないと `main` にマージできない（ruleset の必須のチェック）。
+
+| ジョブ | 手元で同じことをするコマンド |
+| --- | --- |
+| TypeScript | `pnpm lint`・`pnpm format:check`・`pnpm typecheck`・`pnpm test`・`pnpm build`・`pnpm audit --audit-level high` |
+| Python | `services/worker` で `uv run ruff check app tests`・`uv run ruff format --check app tests`・`uv run mypy`・`uv run pytest` |
+| 結合テスト | 上の「結合テスト」（CI では PostgreSQL を毎回まっさらから作り、`01-roles.sql` → `prisma migrate deploy` → `test:integration`） |
+| イメージ | 上の「全部を箱（コンテナ）で起動する」の `docker buildx build`（ARM の計算機で作るだけ。どこにも送らない） |
+
+- CI が失敗したら、PR の「Checks」のタブで、失敗したジョブのログを見る。まず手元で同じコマンドを実行して、同じエラーが出るか確かめる
+- 部品の更新の PR は、Dependabot（`.github/dependabot.yml`）が毎週作る。CI が通ったら、中身（変更の履歴）を見てからマージする
+
 ## 止める・片付ける
 
 | コマンド | 箱 | DB のデータ | 使うとき |
