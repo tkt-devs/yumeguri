@@ -34,6 +34,11 @@ __pycache__/
 *.tfvars
 !*.tfvars.example
 crash.log
+# 一時的に設定を上書きするファイル（bootstrap の最初の1回など。infra/terraform/README.md）
+*_override.tf
+# plan の結果（秘密の値が入ることがある）
+tfplan
+*.tfplan
 
 # --- OS・エディター ---
 .DS_Store

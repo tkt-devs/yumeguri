@@ -1,0 +1,4 @@
+# terraform.tfvars にコピーして、値を入れる（terraform.tfvars は Git に入らない）
+# account_id は `aws sts get-caller-identity --profile yumeguri --query Account --output text` で分かる
+env        = "staging"
+account_id = "123456789012"

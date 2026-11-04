@@ -12,6 +12,9 @@ runs:
   steps:
     # Node・pnpm の版は mise.toml から（手元と同じ版になる）
     - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      # mise.toml の Terraform は、このジョブでは使わないので入れない
+      with:
+        install_args: node pnpm
     - name: pnpm の置き場所を調べる
       id: pnpm-store
       shell: bash

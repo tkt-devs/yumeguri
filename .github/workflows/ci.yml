@@ -1,6 +1,5 @@
 # CI：PR と main への push のたびに、検査・テスト・ビルドを走らせる（S1-11）
 # ここのジョブが全部通らないと、main にマージできない（GitHub の ruleset で必須にしている）
-# Terraform のジョブ（fmt -check・validate）は、Terraform のファイルを作る S1-12 で足す
 name: CI
 
 on:
@@ -125,3 +124,31 @@ jobs:
           push: false
           cache-from: type=gha,scope=worker
           cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=worker,mode=max' || '' }}
+
+  terraform:
+    name: Terraform（fmt・validate）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # AWS にはつながない（書き方と文法だけを調べる）。plan・apply は手元で行う（infra/terraform/README.md）
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Terraform の版は mise.toml から（手元と同じ版になる）
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          install_args: terraform
+      - run: terraform fmt -check -recursive infra/terraform
+      # state のバケットにはつながず（-backend=false）、プロバイダーだけを取ってきて調べる
+      # 調べるのは versions.tf があるフォルダ全部（modules/ は、それを使う環境のフォルダから調べられる）
+      # envs/production を足しても、ここは変えなくてよい。lock ファイルを入れ忘れたら、-lockfile=readonly で止まる
+      # プロバイダーは1回だけ取ってきて、ほかのフォルダでも使い回す（TF_PLUGIN_CACHE_DIR）
+      - name: terraform validate
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          for dir in $(find infra/terraform -name versions.tf -not -path '*/.terraform/*' -not -path '*/modules/*' -exec dirname {} \; | sort); do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="$dir" validate
+            echo "::endgroup::"
+          done
