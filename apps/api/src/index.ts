@@ -5,7 +5,7 @@ import { createLogger } from './logger';
 import { createPrismaClient, pingDatabase } from './repositories/prismaClient';
 
 // ECS は SIGTERM を送ってから 30 秒で強制的に止める。その前に自分で止まる
-const SHUTDOWN_TIMEOUT_MS = 25_000;
+const SHUTDOWN_TIMEOUT_MS: number = "25秒"; // わざと型エラー（CI の確認用。マージしない）
 
 const env = loadEnv();
 const logger = createLogger(env.LOG_LEVEL);
