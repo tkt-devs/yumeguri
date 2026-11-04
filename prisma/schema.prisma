@@ -37,6 +37,13 @@ enum StoreStatus {
   closed
 }
 
+// 来訪の付け方。v0.1 は qr（スタッフ端末の QR）だけ使う
+enum VisitSource {
+  qr
+  posted_qr
+  manual
+}
+
 // アップロード中 → 加工中（ワーカー） → 準備完了 / 失敗
 enum PhotoStatus {
   uploading
@@ -60,6 +67,8 @@ model User {
   sessions      Session[]
   memberships   Membership[]
   platformRoles PlatformRole[]
+  visits        Visit[]        @relation("VisitUser")
+  createdVisits Visit[]        @relation("VisitCreatedBy")
 }
 
 // ログインの方法
@@ -187,6 +196,7 @@ model Store {
   businessHours BusinessHour[]
   photos        Photo[]
   memberships   Membership[]
+  visits        Visit[]
 
   // id だけで一意だが、Membership・Visit の複合外部キーの参照先にするために必要
   @@unique([id, organizationId])
@@ -230,4 +240,34 @@ model Photo {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId, sortOrder])
+}
+
+// 来訪（チェックイン）。1行が「この人が、この日に、この銭湯に来た」
+// 同じ人・同じ日・同じ銭湯は1回だけ（取り消したものは数えない）。この部分一意インデックスと、
+// 「手動なら付けた人が残る」の CHECK は、SQL のマイグレーションで足す
+model Visit {
+  id             String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  storeId        String      @map("store_id") @db.Uuid
+  // 銭湯から決める（利用者が送ってきた値は使わない）。団体ごとの検索・集計を JOIN なしで行うために持つ
+  organizationId String      @map("organization_id") @db.Uuid
+  // JST の日付（サーバーの時刻は UTC なので、アプリで JST に直して入れる）
+  visitedOn      DateTime    @map("visited_on") @db.Date
+  source         VisitSource
+  // 手動で付けたときのスタッフ
+  createdById    String?     @map("created_by") @db.Uuid
+  // 取り消した日時。取り消した来訪は、一意の判定にも、スタンプにも数えない
+  revokedAt      DateTime?   @map("revoked_at") @db.Timestamptz(6)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // 利用者・銭湯が消えても、来訪の記録は消さずに断る（スタンプ・レポートの元になるため）
+  user      User  @relation("VisitUser", fields: [userId], references: [id], onDelete: Restrict)
+  // 複合外部キー：「A 団体の来訪なのに、B 団体の銭湯を指す」行を DB が受け付けない
+  store     Store @relation(fields: [storeId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdBy User? @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  // レポート（銭湯・日付ごと）と、自分の来訪の一覧
+  @@index([storeId, visitedOn])
+  @@index([userId, visitedOn])
 }
