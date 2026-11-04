@@ -9,5 +9,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "6.70.0"
     }
+    # Cloudflare の IP アドレスの範囲を読むためだけに使う（ADR-013）
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "5.28.1"
+    }
   }
 }
