@@ -1,3 +1,5 @@
 [tools]
 node = "24"
 pnpm = "11"
+# infra/terraform の versions.tf の required_version と、同じ範囲にする
+terraform = "1.17.1"

@@ -1,0 +1,6 @@
+# terraform init -backend-config=staging.s3.tfbackend
+bucket       = "yumeguri-tfstate-staging"
+key          = "bootstrap/terraform.tfstate"
+region       = "ap-northeast-1"
+encrypt      = true
+use_lockfile = true

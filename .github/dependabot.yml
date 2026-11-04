@@ -44,6 +44,20 @@ updates:
       actions:
         patterns: ['*']
 
+  # Terraform の AWS プロバイダー（versions.tf の版と .terraform.lock.hcl を一緒に更新する）
+  # Terraform 本体の版は Dependabot では上がらないので、mise.toml と versions.tf を手で上げる
+  - package-ecosystem: terraform
+    directories: [/infra/terraform/bootstrap, /infra/terraform/envs/*]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+    groups:
+      terraform:
+        patterns: ['*']
+
   # docker-compose.yml のイメージ（postgres・valkey・LocalStack）
   # ci.yml の結合テストの postgres の版も、これに合わせて手で上げる
   - package-ecosystem: docker-compose
