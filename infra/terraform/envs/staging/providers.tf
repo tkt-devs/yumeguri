@@ -13,3 +13,6 @@ provider "aws" {
     }
   }
 }
+
+# 今は、公開の情報（IP アドレスの範囲）を読むだけなので、API のトークンを渡さない
+provider "cloudflare" {}
