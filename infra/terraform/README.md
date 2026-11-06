@@ -7,8 +7,12 @@ infra/terraform/
 ├── bootstrap/      # 最初に1回だけ作るもの：state を置く S3 のバケット
 ├── modules/        # staging・production で同じものを作るための部品（S1-13 から）
 └── envs/
-    └── staging/    # staging の環境。state は bootstrap のバケットに置く
+    ├── staging-persistent/  # staging の「ずっと残す層」：S3・SQS・シークレットの入れ物（S1-14）
+    └── staging/             # staging の「使うときだけの層」：VPC・NAT・RDS・ElastiCache（S1-13・S1-14）
 ```
+
+- 2つの層は、**state を別々に** 置く（ADR-022）。`staging` を `destroy` しても、`staging-persistent`（アップロードされたファイル・手で入れたシークレットの値）は消えない
+- **お金**：`staging` の RDS・ElastiCache・NAT は、置いているだけで1時間ごとに費用がかかる（合わせて月 約44ドル）。使わないときは消す（S1-19 で `up` / `down` にまとめる）
 
 - **state**：Terraform が AWS に作ったものの記録。S3 のバケット `yumeguri-tfstate-<環境>` に置く（バージョニング・暗号化・パブリックアクセスのブロック・HTTPS だけ）
 - **ロック**：同時に2人が apply しないように、S3 にロックのファイルを置く（`use_lockfile`。DynamoDB の表は使わない）
@@ -31,10 +35,12 @@ aws sts get-caller-identity --query Account --output text
 
 各フォルダの `terraform.tfvars.example` を `terraform.tfvars` にコピーして、アカウント ID を入れる。`terraform.tfvars` は Git に入らない。ほかのアカウントにつながっていると、`plan` の時点で止まる（`allowed_account_ids`）。
 
-## ふだんの使い方（envs/staging）
+## ふだんの使い方（envs/staging-persistent・envs/staging）
+
+最初に `staging-persistent`、次に `staging` の順に作る。どちらのフォルダでも同じコマンドを使う。
 
 ```bash
-cd infra/terraform/envs/staging
+cd infra/terraform/envs/staging   # または envs/staging-persistent
 terraform init     # 最初の1回と、プロバイダーの版を変えたとき
 terraform plan     # 何が変わるかを読む。destroy・replace があれば、理由が分かるまで apply しない
 terraform apply
