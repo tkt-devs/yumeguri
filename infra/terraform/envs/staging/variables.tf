@@ -7,3 +7,14 @@ variable "account_id" {
     error_message = "account_id は 12 桁の数字にする。"
   }
 }
+
+variable "image_tag" {
+  description = "動かすイメージのタグ（Git のコミット ID）。API・ワーカーで同じものを使う"
+  type        = string
+}
+
+variable "alb_test_ingress_cidrs" {
+  description = "試しの間だけ、ALB の 80 に届いてよい IP（自分の IP/32）。terraform.tfvars に書く（Git に入れない）"
+  type        = list(string)
+  default     = []
+}

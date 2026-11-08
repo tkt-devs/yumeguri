@@ -26,3 +26,10 @@ module "app_secrets" {
     "session-secret" = "セッションの Cookie に使う鍵（ADR-004）"
   }
 }
+
+# コンテナのイメージの置き場所（S1-15）。消すとイメージを押し上げ直すことになるので、ずっと残す層に置く
+module "ecr" {
+  source = "../../modules/ecr"
+
+  repositories = ["yumeguri-api", "yumeguri-worker"]
+}

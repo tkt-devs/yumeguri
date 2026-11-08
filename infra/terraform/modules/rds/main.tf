@@ -82,9 +82,12 @@ resource "aws_secretsmanager_secret_version" "db_user" {
   for_each = var.db_users
 
   secret_id = aws_secretsmanager_secret.db_user[each.key].id
+  # url：ECS がそのまま DATABASE_URL として渡せる形（JSON の中の1つのキーを選んで渡せる）
+  # sslmode=verify-full：通信を暗号化し、RDS の証明書も確かめる（RDS の CA の束は S1-17 でイメージに入れる）
   secret_string_wo = jsonencode({
     username = each.key
     password = ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password
+    url      = "postgresql://${each.key}:${ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password}@${aws_db_instance.this.address}:${aws_db_instance.this.port}/${aws_db_instance.this.db_name}?sslmode=verify-full"
   })
   # この番号を変えたときだけ、新しいパスワードを書き込む（変えなければ、plan のたびに書き換えない）
   secret_string_wo_version = 1

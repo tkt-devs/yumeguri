@@ -86,3 +86,23 @@ production（S4-01）では、production のアカウントにログインし、
 ### バケットを消したいとき
 
 `main.tf` の `prevent_destroy = true` が、消すのを止める。中に入っている state も全部なくなるので、先にすべての環境を `destroy` してから、この行を外して行う。
+
+## イメージを ECR に押し上げる（S1-17 で自動にするまでの、手での手順）
+
+`envs/staging` は、ECR の住所を `envs/staging-persistent` の出力から読む。**先に `staging-persistent` を apply** してから行う。
+
+```bash
+export AWS_PROFILE=yumeguri
+REG=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-northeast-1.amazonaws.com
+TAG=$(git rev-parse --short=12 HEAD)   # タグ＝Git のコミット ID（同じタグは上書きできない）
+aws ecr get-login-password | docker login --username AWS --password-stdin "$REG"
+
+# --provenance=false --sbom=false：作り方の記録を、タグのない別のイメージとして押し上げない
+# （ECR の「タグのないイメージは1日で消す」ルールで、イメージが壊れないように）
+docker buildx build --platform linux/arm64 --provenance=false --sbom=false \
+  -t "$REG/yumeguri-api:$TAG" -f apps/api/Dockerfile --push .
+docker buildx build --platform linux/arm64 --provenance=false --sbom=false \
+  -t "$REG/yumeguri-worker:$TAG" -f services/worker/Dockerfile --push services/worker
+```
+
+そのあと、`envs/staging/terraform.tfvars` の `image_tag` を、このタグにして apply する。
