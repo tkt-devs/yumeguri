@@ -29,3 +29,11 @@ output "db_user_secret_arns" {
 output "valkey_auth_secret_arn" {
   value = module.valkey.auth_secret_arn
 }
+
+output "alb_dns_name" {
+  value = module.alb.dns_name
+}
+
+output "ecs_cluster_name" {
+  value = module.ecs.cluster_name
+}
