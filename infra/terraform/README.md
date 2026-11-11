@@ -33,6 +33,23 @@ export AWS_PROFILE=yumeguri
 aws sts get-caller-identity --query Account --output text
 ```
 
+# Cloudflare の API トークンを、キーチェーンから環境変数に入れる（画面にもファイルにも出さない）
+export CLOUDFLARE_API_TOKEN=$(security find-generic-password -s yumeguri-cloudflare-api-token -w)
+```
+
+### Cloudflare の API トークン（最初の1回）
+
+Cloudflare のダッシュボード →「My Profile」→「API Tokens」→「Create Token」→「Custom token」で作る。
+
+- 権限（すべて Zone）：Zone Read・DNS Edit・Zone Settings Edit・Zone WAF Edit・Transform Rules Edit・Cache Rules Edit
+- Zone Resources：Include → Specific zone → `sento-stamprally.com`
+
+できたトークンは、Mac のキーチェーンに入れる（入力を求められるので貼り付ける。画面には出ない）。
+
+```bash
+security add-generic-password -a "$USER" -s yumeguri-cloudflare-api-token -w
+```
+
 各フォルダの `terraform.tfvars.example` を `terraform.tfvars` にコピーして、アカウント ID を入れる。`terraform.tfvars` は Git に入らない。ほかのアカウントにつながっていると、`plan` の時点で止まる（`allowed_account_ids`）。
 
 ## ふだんの使い方（envs/staging-persistent・envs/staging）
@@ -44,6 +61,17 @@ cd infra/terraform/envs/staging   # または envs/staging-persistent
 terraform init     # 最初の1回と、プロバイダーの版を変えたとき
 terraform plan     # 何が変わるかを読む。destroy・replace があれば、理由が分かるまで apply しない
 terraform apply
+```
+
+### 使い終わったら（費用のかかるものだけ消す）
+
+`envs/staging` で、時間で費用のかかるもの（ECS・ALB・RDS・Valkey）と、ALB を向いている `api.` の DNS を消す。VPC・NAT の EC2 は残る（全部消すときは `terraform destroy`）。
+
+```bash
+cd infra/terraform/envs/staging
+terraform destroy \
+  -target=module.ecs -target=module.alb -target=module.iam_ecs \
+  -target=module.rds -target=module.valkey -target=cloudflare_dns_record.api
 ```
 
 ## bootstrap（state のバケット）

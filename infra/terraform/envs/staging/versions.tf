@@ -9,7 +9,7 @@ terraform {
       source  = "hashicorp/aws"
       version = "6.70.0"
     }
-    # Cloudflare の IP アドレスの範囲を読むためだけに使う（ADR-013）
+    # Cloudflare の IP アドレスの範囲（ADR-013）と、api. の DNS（S1-16）
     cloudflare = {
       source  = "cloudflare/cloudflare"
       version = "5.28.1"

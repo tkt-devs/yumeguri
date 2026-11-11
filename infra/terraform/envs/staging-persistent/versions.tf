@@ -9,5 +9,15 @@ terraform {
       source  = "hashicorp/aws"
       version = "6.70.0"
     }
+    # DNS・ゾーンの設定・ルール（S1-16。ADR-024）
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "5.28.1"
+    }
+    # 秘密のヘッダーの値を作る（S1-16）
+    random = {
+      source  = "hashicorp/random"
+      version = "3.9.1"
+    }
   }
 }

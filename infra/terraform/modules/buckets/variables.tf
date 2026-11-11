@@ -19,3 +19,15 @@ variable "log_retention_days" {
   type        = number
   default     = 90
 }
+
+variable "cloudfront_distribution_arns" {
+  description = "公開用サムネイルのバケットを読んでよい CloudFront のディストリビューションの ARN（OAC）"
+  type        = list(string)
+  default     = []
+}
+
+variable "alb_log_prefix" {
+  description = "ログ用のバケットの中で、ALB のアクセスログを置く場所（null なら、ALB に書く許可を出さない）"
+  type        = string
+  default     = null
+}

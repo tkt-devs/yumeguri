@@ -1,2 +1,4 @@
 # terraform.tfvars にコピーして、値を入れる（terraform.tfvars は Git に入らない）
 account_id = "123456789012"
+# Vercel のプロジェクトに app-stg.… を足したときに出る CNAME の値（まだなら空のまま）
+vercel_cname_target = ""

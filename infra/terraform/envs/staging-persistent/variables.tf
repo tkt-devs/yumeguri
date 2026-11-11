@@ -7,3 +7,9 @@ variable "account_id" {
     error_message = "account_id は 12 桁の数字にする。"
   }
 }
+
+variable "vercel_cname_target" {
+  description = "Vercel がドメインの設定で示す CNAME の値（app. を向ける先）。空なら、レコードを作らない"
+  type        = string
+  default     = ""
+}
