@@ -1,4 +1,4 @@
-# staging の「使うときだけの層」（ADR-022）：VPC・NAT・RDS・ElastiCache。modules/ の部品を、ここで組み合わせる
+# staging の「使うときだけの層」（ADR-022）：VPC・NAT・RDS・ElastiCache・ECS・ALB・api. の DNS。modules/ の部品を、ここで組み合わせる
 
 # Cloudflare の IP アドレスの範囲（公開の情報なので、API のトークンは要らない）
 # apply のたびに最新を取り直す（ADR-013：一覧は変わることがある）
@@ -63,19 +63,6 @@ locals {
   }
 }
 
-# 試しの間だけ：自分の IP から ALB の 80（HTTP）を受ける（S1-15）
-# S1-16 で HTTPS と Cloudflare に切り替えたら、このブロックと var.alb_test_ingress_cidrs を消す
-resource "aws_vpc_security_group_ingress_rule" "alb_test_http" {
-  for_each = toset(var.alb_test_ingress_cidrs)
-
-  security_group_id = module.network.security_group_ids["alb"]
-  description       = "Temporary HTTP for testing"
-  ip_protocol       = "tcp"
-  from_port         = 80
-  to_port           = 80
-  cidr_ipv4         = each.value
-}
-
 module "iam_ecs" {
   source = "../../modules/iam_ecs"
 
@@ -90,14 +77,38 @@ module "iam_ecs" {
   api_runtime_secret_arns = [local.persistent.app_secret_arns["qr-signing-key"]]
 }
 
+# ---- 入口（S1-16） ----
+
+# Cloudflare が付ける秘密のヘッダーの値（ずっと残す層が作り、Secrets Manager に置いたもの）
+data "aws_secretsmanager_secret_version" "origin_header" {
+  secret_id = local.persistent.origin_header_secret_arn
+}
+
 module "alb" {
   source = "../../modules/alb"
 
-  name              = "yumeguri-staging"
-  vpc_id            = module.network.vpc_id
-  public_subnet_ids = module.network.public_subnet_ids
-  security_group_id = module.network.security_group_ids["alb"]
-  target_port       = local.api_port
+  name                = "yumeguri-staging"
+  vpc_id              = module.network.vpc_id
+  public_subnet_ids   = module.network.public_subnet_ids
+  security_group_id   = module.network.security_group_ids["alb"]
+  target_port         = local.api_port
+  certificate_arn     = local.persistent.api_certificate_arn
+  origin_header_name  = local.persistent.origin_header_name
+  origin_header_value = data.aws_secretsmanager_secret_version.origin_header.secret_string
+  access_log_bucket   = local.persistent.bucket_names["logs"]
+  access_log_prefix   = local.persistent.alb_log_prefix
+}
+
+# api. を ALB に向ける。Cloudflare のプロキシを有効にする（オレンジの雲）
+# ALB の DNS 名は作り直すたびに変わるので、ALB と同じ「使うときだけの層」に置く
+resource "cloudflare_dns_record" "api" {
+  zone_id = local.persistent.cloudflare_zone_id
+  name    = local.persistent.hosts.api
+  type    = "CNAME"
+  content = module.alb.dns_name
+  ttl     = 1 # プロキシを有効にしたレコードは「自動」（1）にする
+  proxied = true
+  comment = "ALB (Terraform)"
 }
 
 module "ecs" {
@@ -118,7 +129,7 @@ module "ecs" {
   api_environment = merge(local.shared_environment, {
     NODE_ENV   = "staging"
     PORT       = tostring(local.api_port)
-    WEB_ORIGIN = "https://app.stg.sento-stamprally.com"
+    WEB_ORIGIN = "https://${local.persistent.hosts.app}"
   })
   # シークレットの JSON の url のキーを、DATABASE_URL として渡す
   api_secrets = {

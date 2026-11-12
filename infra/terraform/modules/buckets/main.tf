@@ -1,7 +1,7 @@
 # S3 のバケット3つ（AWS 構成図 v0.1・ADR-024）
 # - private：アップロードされた元のファイルと、ジョブが作るファイル（API・ワーカーが署名つき URL で読み書きする）
-# - public ：公開用のサムネイル。名前は public だが、CloudFront からだけ読ませる（その許可は CloudFront を作るときに足す）
-# - logs   ：ALB などのログ（ログを書き込む許可は、ALB を作るとき（S1-16）に足す）
+# - public ：公開用のサムネイル。名前は public だが、CloudFront からだけ読ませる（OAC。S1-16）
+# - logs   ：ALB などのログ（ALB のアクセスログを書く許可は S1-16 で足した）
 
 locals {
   buckets = toset(["private", "public", "logs"])
@@ -164,10 +164,15 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   }
 }
 
-# ---- HTTPS だけ（3つ共通） ----
+# ---- バケットポリシー（S3 のバケットに付けられるポリシーは1つなので、ここでまとめる） ----
 
-data "aws_iam_policy_document" "https_only" {
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+data "aws_iam_policy_document" "this" {
   for_each = aws_s3_bucket.this
+
+  # 3つ共通：HTTPS 以外は断る
 
   statement {
     sid     = "DenyInsecureTransport"
@@ -189,13 +194,61 @@ data "aws_iam_policy_document" "https_only" {
       values   = ["false"]
     }
   }
+
+  # public：CloudFront の、決まったディストリビューションからだけ読める（OAC。S1-16）
+  dynamic "statement" {
+    for_each = each.key == "public" && length(var.cloudfront_distribution_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "AllowCloudFrontRead"
+      effect    = "Allow"
+      actions   = ["s3:GetObject"]
+      resources = ["${each.value.arn}/*"]
+
+      principals {
+        type        = "Service"
+        identifiers = ["cloudfront.amazonaws.com"]
+      }
+
+      # ほかの人の CloudFront からは読めないように、ディストリビューションの ARN で絞る
+      condition {
+        test     = "StringEquals"
+        variable = "AWS:SourceArn"
+        values   = var.cloudfront_distribution_arns
+      }
+    }
+  }
+
+  # logs：このアカウントの ALB だけが、決まった場所にアクセスログを書ける（S1-16）
+  dynamic "statement" {
+    for_each = each.key == "logs" && var.alb_log_prefix != null ? [1] : []
+
+    content {
+      sid     = "AllowAlbAccessLogs"
+      effect  = "Allow"
+      actions = ["s3:PutObject"]
+      # パスにアカウント ID を入れるのが公式の書き方（ほかのアカウントの ALB が書けないようにする）
+      resources = ["${each.value.arn}/${var.alb_log_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"]
+
+      principals {
+        type        = "Service"
+        identifiers = ["logdelivery.elasticloadbalancing.amazonaws.com"]
+      }
+
+      condition {
+        test     = "ArnLike"
+        variable = "aws:SourceArn"
+        values   = ["arn:aws:elasticloadbalancing:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:loadbalancer/*"]
+      }
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "this" {
   for_each = aws_s3_bucket.this
 
   bucket = each.value.id
-  policy = data.aws_iam_policy_document.https_only[each.key].json
+  policy = data.aws_iam_policy_document.this[each.key].json
 
   # パブリックアクセスのブロックを先に有効にする（逆だと、一瞬だけ設定がない時間ができる）
   depends_on = [aws_s3_bucket_public_access_block.this]

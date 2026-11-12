@@ -14,5 +14,5 @@ provider "aws" {
   }
 }
 
-# 今は、公開の情報（IP アドレスの範囲）を読むだけなので、API のトークンを渡さない
+# API のトークンは、環境変数 CLOUDFLARE_API_TOKEN から読む（ファイルに書かない。infra/terraform/README.md）
 provider "cloudflare" {}

@@ -13,6 +13,8 @@ Terraform（`envs/staging-persistent`）は、シークレットの **入れ物*
 
 DB のユーザーのパスワード（`yumeguri/staging/db/…`）と、Valkey の合言葉（`yumeguri/staging/valkey-auth`）は、Terraform（`envs/staging`）が値まで入れる（state には残らない）。手で入れない。
 
+Cloudflare が `api.` に付ける秘密のヘッダーの値（`yumeguri/staging/origin-header`）も、Terraform（`envs/staging-persistent`）が値まで入れる。この値は、Cloudflare のルールにそのまま書くので、**state に残る**（Cloudflare 側に「書くだけの引数」がないため）。変えるときは `terraform apply -replace=module.edge.random_password.origin_header` を `staging-persistent` で行い、続けて `staging` も apply する（ALB のルールが新しい値を読む）。
+
 ## CLI で入れる
 
 値を、シェルの履歴に残さない。ファイルから読ませて、すぐ消す。

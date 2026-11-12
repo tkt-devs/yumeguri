@@ -2,5 +2,3 @@
 account_id = "123456789012"
 # 動かすイメージのタグ（ECR に押し上げた Git のコミット ID）
 image_tag = "0123abc"
-# 試しの間だけ、ALB の 80 に届いてよい IP（curl -s https://checkip.amazonaws.com で調べて /32 を付ける）。使わないときは []
-alb_test_ingress_cidrs = []
