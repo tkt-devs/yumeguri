@@ -3,6 +3,11 @@ output "endpoint" {
   value       = aws_db_instance.this.endpoint
 }
 
+output "address" {
+  description = "RDS のホスト名（ポートなし）"
+  value       = aws_db_instance.this.address
+}
+
 output "master_user_secret_arn" {
   description = "管理者のパスワードのシークレット（RDS が作ったもの）。DB のユーザーを作る単発のタスクだけが読む"
   value       = aws_db_instance.this.master_user_secret[0].secret_arn

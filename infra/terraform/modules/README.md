@@ -11,9 +11,10 @@ staging・production で同じものを作るための部品を置く。
 | `rds` | RDS for PostgreSQL・サブネットグループ・パラメータグループ、DB のユーザーのパスワード（state に残さない） | S1-14 |
 | `valkey` | ElastiCache for Valkey（TLS・AUTH トークン。トークンは state に残さない） | S1-14 |
 | `ecr` | ECR のリポジトリ（タグの上書きなし・押し上げたときのスキャン・古いイメージを消すルール） | S1-15 |
-| `iam_ecs` | ECS のタスク実行ロール・API のタスクロール・ワーカーのタスクロール | S1-15 |
-| `ecs` | ECS のクラスター・ロググループ・タスク定義（API・ワーカー）・サービス | S1-15 |
+| `iam_ecs` | ECS のタスク実行ロール・API のタスクロール・ワーカーのタスクロール・DB の準備用のタスク実行ロール（管理者のパスワードを読めるのはこれだけ） | S1-15・S1-17 |
+| `ecs` | ECS のクラスター・ロググループ・タスク定義（API・ワーカー・DB の準備用の単発のタスク2つ）・サービス | S1-15・S1-17 |
 | `alb` | ALB・ターゲットグループ（`/healthz`）・HTTPS のリスナー（秘密のヘッダーがなければ 403）・アクセスログ | S1-15・S1-16 |
 | `acm_cert` | ACM の証明書と、Cloudflare に作る DNS の検証用のレコード | S1-16 |
 | `edge` | Cloudflare のゾーンの設定（Full (strict)）・ルール（秘密のヘッダー・キャッシュしない・Webhook を WAF から外す）・秘密のヘッダーの値（Secrets Manager） | S1-16 |
 | `cdn` | CloudFront・OAC・`img.` の DNS（灰色の雲） | S1-16 |
+| `github_deploy` | GitHub Actions の OIDC のプロバイダーと、デプロイ用のロール（このリポジトリの `main` からだけ引き受けられる） | S1-17 |

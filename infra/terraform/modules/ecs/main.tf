@@ -12,10 +12,10 @@ resource "aws_ecs_cluster" "this" {
   }
 }
 
-# ---- ログ（API・ワーカー）。30日で消す ----
+# ---- ログ（API・ワーカー・DB の準備用の単発のタスク）。30日で消す ----
 
 resource "aws_cloudwatch_log_group" "this" {
-  for_each = toset(["api", "worker"])
+  for_each = toset(["api", "worker", "db-tasks"])
 
   name              = "/ecs/${var.name}/${each.key}"
   retention_in_days = var.log_retention_days
@@ -103,6 +103,43 @@ resource "aws_ecs_task_definition" "worker" {
       logConfiguration = {
         logDriver = "awslogs"
         options   = local.log_options["worker"]
+      }
+    },
+  ])
+}
+
+# ---- DB の準備用の単発のタスク（S1-17）：CD（infra/scripts/deploy-staging.sh）が、デプロイの前に1回ずつ動かす ----
+# イメージは apps/api/Dockerfile の db-tasks。サービスにはしない（動かして、終わったら止まる）
+# どのサブネット・門番で動かすかは、CD が api のサービスの設定をそのまま使う
+# （RDS の門番が、api からの 5432 を通すため）
+# family は <name>-<キー>、コンテナの名前・ログの頭はキーと同じ（CD がこの形で探す）
+
+resource "aws_ecs_task_definition" "db_task" {
+  for_each = var.db_tasks
+
+  family                   = "${var.name}-${each.key}"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = each.value.memory
+  execution_role_arn       = var.db_tasks_execution_role_arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
+  container_definitions = jsonencode([
+    {
+      name        = each.key
+      image       = var.db_tasks_image
+      essential   = true
+      command     = each.value.command
+      environment = [for k, v in each.value.environment : { name = k, value = v }]
+      secrets     = [for k, v in each.value.secrets : { name = k, valueFrom = v }]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options   = merge(local.log_options["db-tasks"], { "awslogs-stream-prefix" = each.key })
       }
     },
   ])

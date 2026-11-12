@@ -115,22 +115,38 @@ production（S4-01）では、production のアカウントにログインし、
 
 `main.tf` の `prevent_destroy = true` が、消すのを止める。中に入っている state も全部なくなるので、先にすべての環境を `destroy` してから、この行を外して行う。
 
-## イメージを ECR に押し上げる（S1-17 で自動にするまでの、手での手順）
+## デプロイ（S1-17・ADR-026）
 
-`envs/staging` は、ECR の住所を `envs/staging-persistent` の出力から読む。**先に `staging-persistent` を apply** してから行う。
+**`main` にマージすると、自動で行われる**（`.github/workflows/cd.yml`）。
+
+1. CI（`ci.yml`）が `main` で成功したら、CD が動く
+2. GitHub Actions が OIDC でデプロイ用のロール（`modules/github_deploy`）を引き受ける。AWS のアクセスキーは使わない
+3. イメージ3つ（`yumeguri-api`・`yumeguri-worker`・`yumeguri-db-tasks`）を作り、Git のコミット ID の先頭 12 文字のタグで ECR に押し上げる
+4. `infra/scripts/deploy-staging.sh` を動かす
+   - staging が止まっていれば、タグを SSM のパラメータ `/yumeguri/staging/image-tag` に記録するだけで終わる
+   - 動いていれば、DB のユーザーの作成（`db-bootstrap`）→ マイグレーション（`db-migrate`）→ API・ワーカーの入れ替え → 落ち着くまで待つ → タグを記録する
+
+`envs/staging` は、動かすイメージのタグをこの SSM のパラメータから読む。**up（`terraform apply`）のたびに、いちばん新しくデプロイしたイメージで作られる。**
+
+### 最初の1回だけ：デプロイ用のロールを GitHub に教える
+
+`envs/staging-persistent` を apply したあと、ロールの ARN を、リポジトリのシークレット `AWS_DEPLOY_ROLE_ARN` に入れる（ARN にアカウント ID が入るので、リポジトリには書かない）。
 
 ```bash
-export AWS_PROFILE=yumeguri
-REG=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-northeast-1.amazonaws.com
-TAG=$(git rev-parse --short=12 HEAD)   # タグ＝Git のコミット ID（同じタグは上書きできない）
-aws ecr get-login-password | docker login --username AWS --password-stdin "$REG"
-
-# --provenance=false --sbom=false：作り方の記録を、タグのない別のイメージとして押し上げない
-# （ECR の「タグのないイメージは1日で消す」ルールで、イメージが壊れないように）
-docker buildx build --platform linux/arm64 --provenance=false --sbom=false \
-  -t "$REG/yumeguri-api:$TAG" -f apps/api/Dockerfile --push .
-docker buildx build --platform linux/arm64 --provenance=false --sbom=false \
-  -t "$REG/yumeguri-worker:$TAG" -f services/worker/Dockerfile --push services/worker
+cd envs/staging-persistent
+terraform output -raw github_deploy_role_arn | gh secret set AWS_DEPLOY_ROLE_ARN --repo tkt-devs/yumeguri
 ```
 
-そのあと、`envs/staging/terraform.tfvars` の `image_tag` を、このタグにして apply する。
+SSM のパラメータの初めの値（`ea2e973558e4`）は、S1-17 より前のイメージを指している。このタグには DB の準備用のイメージがなく、API のイメージにも RDS の CA の束が入っていない。**最初の CD が成功してから up する。**
+
+### 手で出し直すとき
+
+GitHub の Actions の画面で「CD (staging)」を選び、「Run workflow」（`main`）を押す。または：
+
+```bash
+gh workflow run cd.yml --repo tkt-devs/yumeguri --ref main
+```
+
+### up したあと、DB のユーザーとマイグレーションだけを流すとき
+
+RDS を作り直すと、DB のユーザーも消える（`docs/runbook/db-users.md`）。up のあとは、手で CD を動かす（上）と、DB の準備から入れ替えまでが行われる（S1-19 で up に組み込む）。

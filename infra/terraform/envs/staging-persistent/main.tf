@@ -49,7 +49,39 @@ module "app_secrets" {
 module "ecr" {
   source = "../../modules/ecr"
 
-  repositories = ["yumeguri-api", "yumeguri-worker"]
+  # yumeguri-db-tasks：DB のユーザーの作成・マイグレーションの単発のタスク用（S1-17）
+  repositories = ["yumeguri-api", "yumeguri-worker", "yumeguri-db-tasks"]
+}
+
+# ---- 自動デプロイ（S1-17・ADR-026） ----
+
+locals {
+  # GitHub の身分証の sub。このリポジトリは「変わらない形」（owner と repo の ID 入り）を使う
+  # （gh api repos/tkt-devs/yumeguri/actions/oidc/customization/sub の sub_claim_prefix）
+  github_main_subject = "repo:tkt-devs@349786052/yumeguri@1439185466:ref:refs/heads/main"
+}
+
+# いま staging に出すイメージのタグ（Git のコミット ID）。CD が書き、envs/staging が読む
+# 初めの値だけを Terraform で入れる。そのあとは CD が書き換えるので、Terraform は値の違いを無視する
+resource "aws_ssm_parameter" "image_tag" {
+  name        = "/yumeguri/staging/image-tag"
+  description = "staging で動かすイメージのタグ（CD が書き換える）"
+  type        = "String"
+  value       = "ea2e973558e4"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+module "github_deploy" {
+  source = "../../modules/github_deploy"
+
+  # 使うときだけの層（envs/staging）の名前。そこが作るクラスター・ロールなどは、すべてこの名前で始まる
+  name                    = "yumeguri-staging"
+  allowed_subjects        = [local.github_main_subject]
+  ecr_repository_arns     = values(module.ecr.repository_arns)
+  image_tag_parameter_arn = aws_ssm_parameter.image_tag.arn
 }
 
 # ---- 入口（S1-16・ADR-024） ----

@@ -23,13 +23,36 @@ data "aws_iam_policy_document" "ecs_tasks_assume" {
 }
 
 # ---- タスク実行ロール：ECS が「タスクを起動するとき」に使う ----
+# 2つ作る。中身の形は同じで、取ってくるイメージ・書くログ・読むシークレットだけが違う
+# - ecs-execution：API・ワーカー
+# - db-tasks-execution：DB の準備用の単発のタスク（S1-17）。管理者のパスワードを読めるのはこれだけ
+#   （単発のタスクの中のアプリは AWS を使わないので、タスクロールは作らない）
+
+locals {
+  execution_roles = {
+    ecs-execution = {
+      ecr_repository_arns = var.ecr_repository_arns
+      log_group_arns      = var.log_group_arns
+      secret_arns         = var.startup_secret_arns
+    }
+    db-tasks-execution = {
+      ecr_repository_arns = [var.db_tasks_ecr_repository_arn]
+      log_group_arns      = [var.db_tasks_log_group_arn]
+      secret_arns         = var.db_tasks_secret_arns
+    }
+  }
+}
 
 resource "aws_iam_role" "execution" {
-  name               = "${var.name}-ecs-execution"
+  for_each = local.execution_roles
+
+  name               = "${var.name}-${each.key}"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
 }
 
 data "aws_iam_policy_document" "execution" {
+  for_each = local.execution_roles
+
   # ECR へのログイン（リソースを絞れない操作）
   statement {
     sid       = "EcrLogin"
@@ -37,7 +60,7 @@ data "aws_iam_policy_document" "execution" {
     resources = ["*"]
   }
 
-  # このアプリのリポジトリからだけ、イメージを取ってくる
+  # 決められたリポジトリからだけ、イメージを取ってくる
   statement {
     sid = "EcrPull"
     actions = [
@@ -45,28 +68,30 @@ data "aws_iam_policy_document" "execution" {
       "ecr:BatchGetImage",
       "ecr:GetDownloadUrlForLayer",
     ]
-    resources = var.ecr_repository_arns
+    resources = each.value.ecr_repository_arns
   }
 
-  # このアプリのロググループにだけ、ログを書く
+  # 決められたロググループにだけ、ログを書く
   statement {
     sid       = "WriteLogs"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-    resources = [for arn in var.log_group_arns : "${arn}:*"]
+    resources = [for arn in each.value.log_group_arns : "${arn}:*"]
   }
 
   # 起動のときに渡すシークレット（DB のパスワードなど）だけを読む
   statement {
     sid       = "ReadStartupSecrets"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = var.startup_secret_arns
+    resources = each.value.secret_arns
   }
 }
 
 resource "aws_iam_role_policy" "execution" {
-  name   = "execution"
-  role   = aws_iam_role.execution.id
-  policy = data.aws_iam_policy_document.execution.json
+  for_each = local.execution_roles
+
+  name   = each.key
+  role   = aws_iam_role.execution[each.key].id
+  policy = data.aws_iam_policy_document.execution[each.key].json
 }
 
 # ---- API のタスクロール：API のコンテナの中のアプリが使う ----

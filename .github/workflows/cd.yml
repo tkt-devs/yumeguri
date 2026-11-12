@@ -1,0 +1,125 @@
+# CD：main の CI が通ったら、イメージを ECR に押し上げ、staging が動いていれば入れ替える（S1-17・ADR-026）
+# AWS には OIDC で入る（GitHub に AWS のアクセスキーを置かない）
+
+name: CD (staging)
+
+on:
+  # CI（ci.yml）が終わったら動く。成功したときだけ、下の if で先に進む
+  # （テストが落ちたコードを staging に出さない）
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # 手でやり直す・出し直すとき（main で動かす）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # OIDC の身分証（JWT）をもらうのに要る
+  id-token: write
+
+# デプロイは1つずつ。途中で止めると、マイグレーションの途中で止まることがあるので、止めない
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: staging にデプロイ
+    # main への push の CI が成功したとき（PR の CI では動かさない）か、手で動かしたとき
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # 本番（ECS Fargate）と同じ ARM の計算機で作る（ADR-002）
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ap-northeast-1
+      # CI で試したのと同じコミットを出す
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+
+      - name: イメージのタグを決める（Git のコミット ID の先頭 12 文字）
+        id: tag
+        run: echo "tag=${HEAD_SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+      # デプロイ用のロールを引き受ける。ロールの ARN は、リポジトリのシークレットに入れてある
+      # （アカウント ID をリポジトリに書かないため。ログでもアカウント ID を *** で隠す）
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: cd-staging-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      # ECR のタグは上書きできない（IMMUTABLE）。やり直したときに、もうあるイメージは作らない
+      - name: もう押し上げたイメージを調べる
+        id: exists
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          for repo in api worker db-tasks; do
+            if aws ecr describe-images --repository-name "yumeguri-$repo" --image-ids "imageTag=$TAG" >/dev/null 2>&1; then
+              echo "$repo=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$repo=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # provenance・sbom を false にする：作り方の記録を、タグのない別のイメージとして押し上げない
+      # （ECR の「タグのないイメージは1日で消す」ルールで、イメージが壊れないように）
+      # キャッシュは CI（ci.yml）が main で書いたものを読むだけにする
+      - name: API のイメージ
+        if: steps.exists.outputs.api != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.ecr.outputs.registry }}/yumeguri-api:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=api
+
+      - name: DB の準備用のイメージ
+        if: steps.exists.outputs.db-tasks != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: db-tasks
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.ecr.outputs.registry }}/yumeguri-db-tasks:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=api
+
+      - name: ワーカーのイメージ
+        if: steps.exists.outputs.worker != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/worker
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.ecr.outputs.registry }}/yumeguri-worker:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=worker
+
+      - name: staging に出す
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          echo "### staging へのデプロイ（\`$TAG\`）" >> "$GITHUB_STEP_SUMMARY"
+          infra/scripts/deploy-staging.sh "$TAG"

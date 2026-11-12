@@ -30,12 +30,31 @@ COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 RUN pnpm --filter @yumeguri/api build
 
+# RDS の証明書を確かめるための、RDS の CA の束（東京）。OS が初めから信頼している一覧には入っていない
+# 2段目（runtime）と DB の準備用（db-tasks）の両方で使う
+COPY docker/rds/ap-northeast-1-bundle.pem /certs/rds-ca.pem
+# DB のユーザーの権限（db-tasks の db-bootstrap が流す。ローカルと同じファイル）
+COPY docker/postgres/init/02-grants.sql ./docker/postgres/init/
+
+# ---- DB の準備用（S1-17）：ECS の単発のタスク（db-bootstrap・db-migrate）で使う ----
+# 1段目をそのまま使う（Prisma の CLI・pg・マイグレーションのファイルが入っている）。サービスでは使わない
+#   docker buildx build --platform linux/arm64 --target db-tasks -t yumeguri-db-tasks:local -f apps/api/Dockerfile .
+FROM build AS db-tasks
+# Node.js（pg）は、NODE_EXTRA_CA_CERTS の証明書も「信頼してよい発行元」に足す
+ENV NODE_EXTRA_CA_CERTS=/certs/rds-ca.pem
+USER node
+# 何を動かすかは、タスク定義の command で決める（db-bootstrap.ts・prisma migrate deploy）
+
 # ---- 2段目：動かすのに必要なもの（まとめた1ファイル）だけを持っていく ----
 # pnpm・TypeScript・node_modules は入らないので、小さく、攻撃に使える道具も少ない
 FROM node:24-trixie-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/api/dist ./dist
+# RDS の CA の束。DATABASE_URL の sslmode=verify-full で、RDS の証明書を確かめるのに使う
+# （Node.js は、NODE_EXTRA_CA_CERTS の証明書も「信頼してよい発行元」に足す）
+COPY --from=build /certs/rds-ca.pem /certs/rds-ca.pem
+ENV NODE_EXTRA_CA_CERTS=/certs/rds-ca.pem
 # root ではなく、イメージに最初からある node ユーザーで動かす
 USER node
 EXPOSE 3001

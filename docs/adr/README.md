@@ -25,3 +25,4 @@
 | [ADR-022](022-accounts-and-on-demand.md) | AWS のアカウントを staging と production で分け、どちらも使うときだけ作る |
 | [ADR-024](024-cloudflare-and-cloudfront.md) | 入口は Cloudflare（DNS・WAF・API のプロキシ）にし、画像は CloudFront で配る |
 | [ADR-025](025-branch-and-release.md) | ブランチは main だけにし、本番には Release の公開で出す |
+| [ADR-026](026-cd-staging.md) | staging の CD は、CI の成功のあとに OIDC で入り、動いているときだけ入れ替える |
