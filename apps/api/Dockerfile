@@ -33,6 +33,9 @@ RUN pnpm --filter @yumeguri/api build
 # RDS の証明書を確かめるための、RDS の CA の束（東京）。OS が初めから信頼している一覧には入っていない
 # 2段目（runtime）と DB の準備用（db-tasks）の両方で使う
 COPY docker/rds/ap-northeast-1-bundle.pem /certs/rds-ca.pem
+# Prisma の CLI（マイグレーション）用：RDS が使う CA を1枚だけ。Prisma は sslcert のファイルの
+# 最初の1枚しか読まないので、束（3枚）を渡すと、RDS の CA が入っていないのと同じになる（2026-11-12 に確かめた）
+COPY docker/rds/rds-ca-rsa2048-g1.pem /certs/rds-ca-prisma.pem
 # DB のユーザーの権限（db-tasks の db-bootstrap が流す。ローカルと同じファイル）
 COPY docker/postgres/init/02-grants.sql ./docker/postgres/init/
 

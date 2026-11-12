@@ -48,8 +48,14 @@ variable "db_users" {
   default     = ["yumeguri_migrator", "yumeguri_app", "yumeguri_worker"]
 }
 
-variable "ca_bundle_path" {
-  description = "イメージの中の、RDS の CA の束の場所（Prisma の CLI 用の URL の sslcert に入れる。apps/api/Dockerfile）"
+variable "ca_cert_identifier" {
+  description = "RDS の証明書を発行する CA。prisma_ca_path のファイルと同じ CA にする"
   type        = string
-  default     = "/certs/rds-ca.pem"
+  default     = "rds-ca-rsa2048-g1"
+}
+
+variable "prisma_ca_path" {
+  description = "イメージの中の、ca_cert_identifier の CA だけが入ったファイルの場所（Prisma の CLI 用の URL の sslcert に入れる。apps/api/Dockerfile）"
+  type        = string
+  default     = "/certs/rds-ca-prisma.pem"
 }
