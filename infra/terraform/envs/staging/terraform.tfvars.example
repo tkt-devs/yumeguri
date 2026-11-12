@@ -1,4 +1,3 @@
 # terraform.tfvars にコピーして、値を入れる（terraform.tfvars は Git に入らない）
 account_id = "123456789012"
-# 動かすイメージのタグ（ECR に押し上げた Git のコミット ID）
-image_tag = "0123abc"
+# 動かすイメージのタグは、ずっと残す層の SSM のパラメータ（/yumeguri/staging/image-tag）から読む（S1-17）

@@ -52,3 +52,14 @@ output "origin_header_name" {
 output "origin_header_secret_arn" {
   value = module.edge.origin_header_secret_arn
 }
+
+# S1-17（自動デプロイ）で使う
+output "image_tag_parameter_name" {
+  description = "staging で動かすイメージのタグを入れておく SSM のパラメータ"
+  value       = aws_ssm_parameter.image_tag.name
+}
+
+output "github_deploy_role_arn" {
+  description = "GitHub Actions が引き受けるロール（リポジトリのシークレット AWS_DEPLOY_ROLE_ARN に入れる）"
+  value       = module.github_deploy.role_arn
+}

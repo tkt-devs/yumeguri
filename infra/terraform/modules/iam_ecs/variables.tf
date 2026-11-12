@@ -43,3 +43,18 @@ variable "worker_metric_namespace" {
   type        = string
   default     = "yumeguri/worker"
 }
+
+variable "db_tasks_ecr_repository_arn" {
+  description = "DB の準備用のイメージ（yumeguri-db-tasks）のリポジトリ"
+  type        = string
+}
+
+variable "db_tasks_log_group_arn" {
+  description = "DB の準備用の単発のタスクのロググループ"
+  type        = string
+}
+
+variable "db_tasks_secret_arns" {
+  description = "DB の準備用の単発のタスクが読むシークレット（管理者と、3人のユーザーのパスワード）"
+  type        = list(string)
+}

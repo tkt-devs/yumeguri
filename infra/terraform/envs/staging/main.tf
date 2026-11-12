@@ -50,9 +50,17 @@ data "terraform_remote_state" "persistent" {
   }
 }
 
+# 動かすイメージのタグ（Git のコミット ID）。CD（.github/workflows/cd.yml）が、ずっと残す層の SSM のパラメータに書く
+# up のたびに、いちばん新しくデプロイしたイメージで作り直される
+data "aws_ssm_parameter" "image_tag" {
+  name = data.terraform_remote_state.persistent.outputs.image_tag_parameter_name
+}
+
 locals {
   persistent = data.terraform_remote_state.persistent.outputs
   api_port   = 3001
+  image_tag  = data.aws_ssm_parameter.image_tag.insecure_value
+  db_users   = module.rds.db_user_secret_arns
 
   # API・ワーカーに共通で渡す、見られても困らない環境変数
   shared_environment = {
@@ -69,8 +77,12 @@ module "iam_ecs" {
   name                = "yumeguri-staging"
   ecr_repository_arns = values(local.persistent.ecr_repository_arns)
   log_group_arns      = module.ecs.log_group_arns
+  # DB の準備用の単発のタスク（S1-17）
+  db_tasks_ecr_repository_arn = local.persistent.ecr_repository_arns["yumeguri-db-tasks"]
+  db_tasks_log_group_arn      = module.ecs.db_tasks_log_group_arn
+  db_tasks_secret_arns        = concat([module.rds.master_user_secret_arn], values(local.db_users))
   # 起動のときに読むのは、API の DB のパスワードだけ（ワーカーは、まだ DB を使わない）
-  startup_secret_arns     = [module.rds.db_user_secret_arns["yumeguri_app"]]
+  startup_secret_arns     = [local.db_users["yumeguri_app"]]
   private_bucket_arn      = local.persistent.bucket_arns["private"]
   public_bucket_arn       = local.persistent.bucket_arns["public"]
   queue_arns              = values(local.persistent.queue_arns)
@@ -121,8 +133,8 @@ module "ecs" {
   execution_role_arn       = module.iam_ecs.execution_role_arn
   api_task_role_arn        = module.iam_ecs.api_task_role_arn
   worker_task_role_arn     = module.iam_ecs.worker_task_role_arn
-  api_image                = "${local.persistent.ecr_repository_urls["yumeguri-api"]}:${var.image_tag}"
-  worker_image             = "${local.persistent.ecr_repository_urls["yumeguri-worker"]}:${var.image_tag}"
+  api_image                = "${local.persistent.ecr_repository_urls["yumeguri-api"]}:${local.image_tag}"
+  worker_image             = "${local.persistent.ecr_repository_urls["yumeguri-worker"]}:${local.image_tag}"
   api_target_group_arn     = module.alb.api_target_group_arn
   api_port                 = local.api_port
 
@@ -133,8 +145,36 @@ module "ecs" {
   })
   # シークレットの JSON の url のキーを、DATABASE_URL として渡す
   api_secrets = {
-    DATABASE_URL = "${module.rds.db_user_secret_arns["yumeguri_app"]}:url::"
+    DATABASE_URL = "${local.db_users["yumeguri_app"]}:url::"
   }
 
   worker_environment = local.shared_environment
+
+  # DB の準備用の単発のタスク（S1-17）
+  db_tasks_image              = "${local.persistent.ecr_repository_urls["yumeguri-db-tasks"]}:${local.image_tag}"
+  db_tasks_execution_role_arn = module.iam_ecs.db_tasks_execution_role_arn
+  db_tasks = {
+    # DB のユーザーを作る（apps/api/scripts/db-bootstrap.ts）。何回動かしても同じ結果になる
+    db-bootstrap = {
+      command     = ["node_modules/.bin/tsx", "apps/api/scripts/db-bootstrap.ts"]
+      memory      = 512
+      environment = { DB_HOST = module.rds.address }
+      secrets = {
+        DB_ADMIN_USERNAME = "${module.rds.master_user_secret_arn}:username::"
+        DB_ADMIN_PASSWORD = "${module.rds.master_user_secret_arn}:password::"
+        MIGRATOR_PASSWORD = "${local.db_users["yumeguri_migrator"]}:password::"
+        APP_PASSWORD      = "${local.db_users["yumeguri_app"]}:password::"
+        WORKER_PASSWORD   = "${local.db_users["yumeguri_worker"]}:password::"
+      }
+    }
+    # マイグレーション。流すものがなければ、何もしないで終わる
+    # Prisma の CLI は Node.js と schema engine の2つを動かすので、メモリを少し多めにする
+    db-migrate = {
+      command     = ["node_modules/.bin/prisma", "migrate", "deploy"]
+      memory      = 1024
+      environment = {}
+      # Prisma の書き方の URL（modules/rds の prisma_url）
+      secrets = { MIGRATE_DATABASE_URL = "${local.db_users["yumeguri_migrator"]}:prisma_url::" }
+    }
+  }
 }

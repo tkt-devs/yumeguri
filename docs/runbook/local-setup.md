@@ -130,7 +130,7 @@ docker images | grep yumeguri       # イメージの大きさ
 DB を空からやり直すときは、`docker compose down -v` → `docker compose up -d` → `pnpm exec prisma migrate dev` → `pnpm exec prisma db seed`。
 
 - 一度 `main` に入れたマイグレーションのファイルは、書き換えない。直すときは、新しいマイグレーションを足す
-- マイグレーションは、DB のユーザー（`yumeguri_app`・`yumeguri_worker`）の権限を変える。なので、**ユーザーがない DB では失敗する**。ローカルは `01-roles.sql` が先に作る。staging・本番の RDS では、同じ内容の SQL を最初に一度だけ実行してから、`prisma migrate deploy` を実行する
+- マイグレーションは、DB のユーザー（`yumeguri_app`・`yumeguri_worker`）の権限を変える。なので、**ユーザーがない DB では失敗する**。ローカルは `01-roles.sql`・`02-grants.sql` が先に作る。staging・本番の RDS では、CD の `db-bootstrap` が同じ `02-grants.sql` を流してから、マイグレーションを実行する（`docs/runbook/db-users.md`）
 - Prisma の 8 は、まだ試験版（RC）なので上げない（`Update available … 8.0.0-rc` の表示は無視する）
 
 ## 結合テスト（本物の DB を使うテスト）
@@ -151,7 +151,7 @@ PR と `main` への push のたびに、`.github/workflows/ci.yml` が4つの�
 | --- | --- |
 | TypeScript | `pnpm lint`・`pnpm format:check`・`pnpm typecheck`・`pnpm test`・`pnpm build`・`pnpm audit --audit-level high` |
 | Python | `services/worker` で `uv run ruff check app tests`・`uv run ruff format --check app tests`・`uv run mypy`・`uv run pytest` |
-| 結合テスト | 上の「結合テスト」（CI では PostgreSQL を毎回まっさらから作り、`01-roles.sql` → `prisma migrate deploy` → `test:integration`） |
+| 結合テスト | 上の「結合テスト」（CI では PostgreSQL を毎回まっさらから作り、`01-roles.sql`・`02-grants.sql` → `prisma migrate deploy` → `test:integration`） |
 | イメージ | 上の「全部を箱（コンテナ）で起動する」の `docker buildx build`（ARM の計算機で作るだけ。どこにも送らない） |
 
 - CI が失敗したら、PR の「Checks」のタブで、失敗したジョブのログを見る。まず手元で同じコマンドを実行して、同じエラーが出るか確かめる
@@ -163,11 +163,11 @@ PR と `main` への push のたびに、`.github/workflows/ci.yml` が4つの�
 | --- | --- | --- | --- |
 | `docker compose stop` | 残る | 残る | 毎日の終わり。`docker compose start` で再開 |
 | `docker compose down` | 消す | 残る | 設定を変えて、箱を作り直したいとき |
-| `docker compose down -v` | 消す | **消える** | `01-roles.sql` を直したとき・最初からやり直したいとき |
+| `docker compose down -v` | 消す | **消える** | `01-roles.sql`・`02-grants.sql` を直したとき・最初からやり直したいとき |
 
 ## 起動のときに自動で実行されるもの
 
-- `docker/postgres/init/01-roles.sql`：DB のユーザーを3つ作る。**データが空のときだけ** 実行される。直したら `docker compose down -v` → `docker compose up -d`
+- `docker/postgres/init/01-roles.sql`：DB のユーザーを3つ作る。`02-grants.sql`：その権限（RDS でも同じファイルを流す）。どちらも **データが空のときだけ** 実行される。直したら `docker compose down -v` → `docker compose up -d`
   - `yumeguri_migrator`（パスワード `migrator_local`）：表の作成・変更（マイグレーション）
   - `yumeguri_app`（`app_local`）：データの読み書きだけ。表は作れない（NFR-SEC-03）
   - `yumeguri_worker`（`worker_local`）：`Job`・`Photo` だけ（ADR-005）

@@ -95,7 +95,7 @@ jobs:
       # DB のユーザーを作る。サービスコンテナはリポジトリのファイルを読めないので、ここで流し込む
       # （staging・本番の RDS でも、同じ SQL を最初に一度だけ実行する。docs/runbook/local-setup.md）
       - name: DB のユーザーを作る
-        run: psql "postgresql://postgres:postgres@localhost:5432/yumeguri" -v ON_ERROR_STOP=1 -f docker/postgres/init/01-roles.sql
+        run: psql "postgresql://postgres:postgres@localhost:5432/yumeguri" -v ON_ERROR_STOP=1 -f docker/postgres/init/01-roles.sql -f docker/postgres/init/02-grants.sql
       - run: pnpm exec prisma migrate deploy
       - run: pnpm --filter @yumeguri/api test:integration
 
@@ -117,6 +117,15 @@ jobs:
           push: false
           cache-from: type=gha,scope=api
           cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=api,mode=max' || '' }}
+      # DB の準備用（S1-17。CD の単発のタスクで使う）。1段目を API と共有するので、キャッシュも同じものを読む
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: db-tasks
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=api
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: services/worker

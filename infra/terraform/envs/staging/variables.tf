@@ -7,8 +7,3 @@ variable "account_id" {
     error_message = "account_id は 12 桁の数字にする。"
   }
 }
-
-variable "image_tag" {
-  description = "動かすイメージのタグ（Git のコミット ID）。API・ワーカーで同じものを使う"
-  type        = string
-}

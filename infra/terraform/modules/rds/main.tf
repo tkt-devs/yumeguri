@@ -69,6 +69,11 @@ ephemeral "aws_secretsmanager_random_password" "db_user" {
   exclude_punctuation = true
 }
 
+locals {
+  # 接続先（ホスト名:ポート/DB の名前）
+  db_location = "${aws_db_instance.this.address}:${aws_db_instance.this.port}/${aws_db_instance.this.db_name}"
+}
+
 resource "aws_secretsmanager_secret" "db_user" {
   for_each = var.db_users
 
@@ -83,12 +88,19 @@ resource "aws_secretsmanager_secret_version" "db_user" {
 
   secret_id = aws_secretsmanager_secret.db_user[each.key].id
   # url：ECS がそのまま DATABASE_URL として渡せる形（JSON の中の1つのキーを選んで渡せる）
-  # sslmode=verify-full：通信を暗号化し、RDS の証明書も確かめる（RDS の CA の束は S1-17 でイメージに入れる）
+  #   sslmode=verify-full：通信を暗号化し、RDS の証明書も確かめる（pg が読む。RDS の CA の束はイメージの
+  #   NODE_EXTRA_CA_CERTS）
+  # prisma_url：Prisma の CLI（マイグレーション）用。Prisma の CLI は verify-full を知らず、知らない値だと
+  #   証明書を確かめずにつないでしまう（2026-11-11 に確かめた）。そのため Prisma の書き方で書く：
+  #   require（暗号化しないならつながない）＋ sslcert（RDS の CA の束。db-tasks のイメージの中の場所）
+  #   ＋ sslaccept=strict（証明書と名前が合わなければつながない）
   secret_string_wo = jsonencode({
-    username = each.key
-    password = ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password
-    url      = "postgresql://${each.key}:${ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password}@${aws_db_instance.this.address}:${aws_db_instance.this.port}/${aws_db_instance.this.db_name}?sslmode=verify-full"
+    username   = each.key
+    password   = ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password
+    url        = "postgresql://${each.key}:${ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password}@${local.db_location}?sslmode=verify-full"
+    prisma_url = "postgresql://${each.key}:${ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password}@${local.db_location}?sslmode=require&sslcert=${var.ca_bundle_path}&sslaccept=strict"
   })
-  # この番号を変えたときだけ、新しいパスワードを書き込む（変えなければ、plan のたびに書き換えない）
-  secret_string_wo_version = 1
+  # この番号を変えたときだけ、新しい値を書き込む（変えなければ、plan のたびに書き換えない）
+  # 中身の形（キー）を変えたら、番号を上げる。2：prisma_url を足した（S1-17）
+  secret_string_wo_version = 2
 }

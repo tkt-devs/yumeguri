@@ -67,3 +67,23 @@ variable "log_retention_days" {
   type    = number
   default = 30
 }
+
+variable "db_tasks_image" {
+  description = "DB の準備用のイメージ（<ECR の URL>:<タグ>。apps/api/Dockerfile の db-tasks）"
+  type        = string
+}
+
+variable "db_tasks_execution_role_arn" {
+  description = "DB の準備用の単発のタスクのタスク実行ロール（管理者のパスワードを読める）"
+  type        = string
+}
+
+variable "db_tasks" {
+  description = "DB の準備用の単発のタスク（キー → command・メモリ・環境変数・シークレットからの環境変数）"
+  type = map(object({
+    command     = list(string)
+    memory      = number
+    environment = map(string)
+    secrets     = map(string)
+  }))
+}
