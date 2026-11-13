@@ -44,6 +44,9 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = false
   multi_az               = false # ADR-019
   parameter_group_name   = aws_db_parameter_group.this.name
+  # RDS の証明書を発行する CA。Prisma の CLI 用の URL（prisma_url）は、この CA の1枚だけを信頼する
+  # （docker/rds/ の同じ名前のファイル）。変えるときは、そのファイルも一緒に変える
+  ca_cert_identifier = var.ca_cert_identifier
 
   backup_retention_period    = var.backup_retention_days
   auto_minor_version_upgrade = true
@@ -92,15 +95,16 @@ resource "aws_secretsmanager_secret_version" "db_user" {
   #   NODE_EXTRA_CA_CERTS）
   # prisma_url：Prisma の CLI（マイグレーション）用。Prisma の CLI は verify-full を知らず、知らない値だと
   #   証明書を確かめずにつないでしまう（2026-11-11 に確かめた）。そのため Prisma の書き方で書く：
-  #   require（暗号化しないならつながない）＋ sslcert（RDS の CA の束。db-tasks のイメージの中の場所）
+  #   require（暗号化しないならつながない）＋ sslcert（RDS の CA の1枚。db-tasks のイメージの中の場所。
+  #   Prisma はファイルの最初の1枚しか読まないので、束ではなく1枚だけのファイルにする）
   #   ＋ sslaccept=strict（証明書と名前が合わなければつながない）
   secret_string_wo = jsonencode({
     username   = each.key
     password   = ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password
     url        = "postgresql://${each.key}:${ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password}@${local.db_location}?sslmode=verify-full"
-    prisma_url = "postgresql://${each.key}:${ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password}@${local.db_location}?sslmode=require&sslcert=${var.ca_bundle_path}&sslaccept=strict"
+    prisma_url = "postgresql://${each.key}:${ephemeral.aws_secretsmanager_random_password.db_user[each.key].random_password}@${local.db_location}?sslmode=require&sslcert=${var.prisma_ca_path}&sslaccept=strict"
   })
   # この番号を変えたときだけ、新しい値を書き込む（変えなければ、plan のたびに書き換えない）
-  # 中身の形（キー）を変えたら、番号を上げる。2：prisma_url を足した（S1-17）
-  secret_string_wo_version = 2
+  # 中身の形（キー）を変えたら、番号を上げる。2：prisma_url を足した（S1-17）。3：prisma_url の CA を1枚にした
+  secret_string_wo_version = 3
 }

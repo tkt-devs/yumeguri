@@ -42,7 +42,8 @@ RDS の証明書は、AWS 独自の認証局（RDS の CA）が発行してい�
 - 東京の CA の束を `docker/rds/ap-northeast-1-bundle.pem` に置き、API と `db-tasks` のイメージの `/certs/rds-ca.pem` に入れる（取ってきた場所：`https://truststore.pki.rds.amazonaws.com/ap-northeast-1/ap-northeast-1-bundle.pem`）
 - API（`pg`）：`DATABASE_URL` の `sslmode=verify-full` ＋ `NODE_EXTRA_CA_CERTS=/certs/rds-ca.pem`
 - `db-bootstrap`（`pg`）：`ssl: { rejectUnauthorized: true }` ＋ 同じ `NODE_EXTRA_CA_CERTS`
-- **マイグレーション（Prisma の CLI）は `sslmode=verify-full` を知らない**。知らない値は `prefer`（証明書を確かめない）として扱われ、**偽の証明書でもつながってしまう**（2026-11-11 に、手元の試験で確かめた）。シークレットに、Prisma の書き方の URL（`prisma_url`：`sslmode=require&sslcert=/certs/rds-ca.pem&sslaccept=strict`）も入れておき、マイグレーションはそれを使う（`modules/rds`）
+- **マイグレーション（Prisma の CLI）は `sslmode=verify-full` を知らない**。知らない値は `prefer`（証明書を確かめない）として扱われ、**偽の証明書でもつながってしまう**（2026-11-11 に、手元の試験で確かめた）。シークレットに、Prisma の書き方の URL（`prisma_url`：`sslmode=require&sslcert=/certs/rds-ca-prisma.pem&sslaccept=strict`）も入れておき、マイグレーションはそれを使う（`modules/rds`）
+- **Prisma の CLI は、`sslcert` のファイルの最初の1枚しか読まない**。束（3枚）を渡すと、RDS が使う CA（RSA2048、束の3枚目）が読まれず、`certificate verify failed` になる（2026-11-12 に、本物の staging と、本物のイメージの中の試験で確かめた）。そのため、RDS が使う CA の1枚だけを `docker/rds/rds-ca-rsa2048-g1.pem` に置き、`db-tasks` のイメージの `/certs/rds-ca-prisma.pem` に入れる。RDS の CA は `modules/rds` の `ca_cert_identifier` で固定する（変えるときは、このファイルも変える）
 
 ## 注意
 
