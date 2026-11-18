@@ -37,7 +37,7 @@ services:
       retries: 10
 
   aws:
-    image: localstack/localstack:2026.10.4
+    image: localstack/localstack:2026.10.6
     environment:
       LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?LOCALSTACK_AUTH_TOKEN を .env に書いてください}
       SERVICES: s3,sqs
