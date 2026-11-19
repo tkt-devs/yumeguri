@@ -37,3 +37,8 @@ output "alb_dns_name" {
 output "ecs_cluster_name" {
   value = module.ecs.cluster_name
 }
+
+# up のあとに /readyz を確かめる先（infra/scripts/staging.sh）
+output "api_url" {
+  value = "https://${local.persistent.hosts.api}"
+}

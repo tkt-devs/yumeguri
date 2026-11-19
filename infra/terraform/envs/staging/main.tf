@@ -176,5 +176,13 @@ module "ecs" {
       # Prisma の書き方の URL（modules/rds の prisma_url）
       secrets = { MIGRATE_DATABASE_URL = "${local.db_users["yumeguri_migrator"]}:prisma_url::" }
     }
+    # 見本のデータ（架空の団体・銭湯。prisma/seed.ts）。決まった ID で upsert するので、何回動かしても同じ結果になる
+    # シードは Prisma Client（pg）でつなぐので、Prisma の CLI 用の prisma_url ではなく、pg の書き方の url を使う
+    db-seed = {
+      command     = ["node_modules/.bin/tsx", "prisma/seed.ts"]
+      memory      = 512
+      environment = {}
+      secrets     = { MIGRATE_DATABASE_URL = "${local.db_users["yumeguri_migrator"]}:url::" }
+    }
   }
 }

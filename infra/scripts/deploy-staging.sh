@@ -16,17 +16,12 @@ TAG="${1:?使い方：deploy-staging.sh <タグ>}"
 NAME="${NAME:-yumeguri-staging}"
 CLUSTER="${CLUSTER:-$NAME}"
 TAG_PARAMETER="${TAG_PARAMETER:-/yumeguri/staging/image-tag}"
-LOG_GROUP="/ecs/$NAME/db-tasks"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-# 画面と、GitHub Actions の実行結果のまとめ（Summary）の両方に書く
-note() {
-  echo "$*"
-  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    echo "$*" >>"$GITHUB_STEP_SUMMARY"
-  fi
-}
+# note・run_once（単発のタスクを動かして待つ）。staging.sh の up と同じものを使う
+# shellcheck source=SCRIPTDIR/lib/ecs-one-off.sh
+source "$(dirname "$0")/lib/ecs-one-off.sh"
 
 record_tag() {
   aws ssm put-parameter --name "$TAG_PARAMETER" --value "$TAG" --type String --overwrite >/dev/null
@@ -44,37 +39,6 @@ new_revision() {
             .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)' >"$file"
   aws ecs register-task-definition --cli-input-json "file://$file" \
     --query taskDefinition.taskDefinitionArn --output text
-}
-
-# 単発のタスクを動かし、終わるまで待つ。失敗したら、ログを出して止める
-#   $1：名前（db-bootstrap・db-migrate）。family は $NAME-$1、コンテナの名前・ログの頭も $1（modules/ecs）
-run_once() {
-  local name="$1" task_definition task stopped exit_code
-  task_definition="$(new_revision "$NAME-$name")"
-
-  # どのサブネット・門番で動かすかは、API のサービスと同じにする（RDS の門番が、api からの 5432 を通す）
-  task="$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$task_definition" \
-    --launch-type FARGATE --network-configuration "$API_NETWORK" \
-    --query 'tasks[0].taskArn' --output text)"
-  if [ -z "$task" ] || [ "$task" = "None" ]; then
-    echo "::error::$name のタスクを起動できなかった"
-    exit 1
-  fi
-  echo "$name：タスクを起動した。終わるまで待つ"
-  aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
-
-  # 終了コードと止まった理由を、1回で取る（タブで区切られる）
-  stopped="$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" \
-    --query 'tasks[0].[containers[0].exitCode, stoppedReason]' --output text)"
-  exit_code="${stopped%%$'\t'*}"
-  if [ "$exit_code" != "0" ]; then
-    echo "::error::$name が失敗した（終了コード・理由：$stopped）"
-    echo "---- $name のログ ----"
-    aws logs get-log-events --log-group-name "$LOG_GROUP" \
-      --log-stream-name "$name/$name/${task##*/}" --query 'events[].message' --output text || true
-    exit 1
-  fi
-  note "- $name：成功"
 }
 
 # サービスを、今の版のイメージのタグだけを変えた新しい版に入れ替え始める。出力：新しい版の ARN
@@ -128,8 +92,12 @@ fi
 API_NETWORK="$(service_field api '.networkConfiguration')"
 
 # ---- 2. DB の準備 ----
-run_once db-bootstrap
-run_once db-migrate
+# タスク定義は、今の版のイメージのタグだけを変えた新しい版にする（$NAME-<名前>。modules/ecs）
+# （引数の中の $( ) は、失敗しても set -e で止まらないので、先に変数に入れる）
+bootstrap_definition="$(new_revision "$NAME-db-bootstrap")"
+run_once db-bootstrap "$bootstrap_definition"
+migrate_definition="$(new_revision "$NAME-db-migrate")"
+run_once db-migrate "$migrate_definition"
 
 # ---- 3. API・ワーカーを入れ替え、落ち着くまで待つ ----
 new_api="$(start_rollout api "$api_current")"

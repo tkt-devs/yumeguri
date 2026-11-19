@@ -59,6 +59,8 @@ locals {
   # GitHub の身分証の sub。このリポジトリは「変わらない形」（owner と repo の ID 入り）を使う
   # （gh api repos/tkt-devs/yumeguri/actions/oidc/customization/sub の sub_claim_prefix）
   github_main_subject = "repo:tkt-devs@349786052/yumeguri@1439185466:ref:refs/heads/main"
+  # 安全網のジョブ（.github/workflows/staging-reaper.yml）は、Environment staging-reaper で動く
+  github_reaper_subject = "repo:tkt-devs@349786052/yumeguri@1439185466:environment:staging-reaper"
 }
 
 # いま staging に出すイメージのタグ（Git のコミット ID）。CD が書き、envs/staging が読む
@@ -82,6 +84,19 @@ module "github_deploy" {
   allowed_subjects        = [local.github_main_subject]
   ecr_repository_arns     = values(module.ecr.repository_arns)
   image_tag_parameter_arn = aws_ssm_parameter.image_tag.arn
+}
+
+# 消し忘れの安全網：毎晩、使うときだけの層を消すロール（S1-19・ADR-027）
+module "github_reaper" {
+  source = "../../modules/github_reaper"
+
+  name                 = "yumeguri-staging"
+  oidc_provider_arn    = module.github_deploy.oidc_provider_arn
+  allowed_subjects     = [local.github_reaper_subject]
+  secret_prefix        = "yumeguri/staging"
+  state_bucket         = "yumeguri-tfstate-staging"
+  state_key            = "envs/staging/terraform.tfstate"
+  persistent_state_key = "envs/staging-persistent/terraform.tfstate"
 }
 
 # ---- 入口（S1-16・ADR-024） ----

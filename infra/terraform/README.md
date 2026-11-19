@@ -12,7 +12,7 @@ infra/terraform/
 ```
 
 - 2つの層は、**state を別々に** 置く（ADR-022）。`staging` を `destroy` しても、`staging-persistent`（アップロードされたファイル・手で入れたシークレットの値）は消えない
-- **お金**：`staging` の RDS・ElastiCache・NAT は、置いているだけで1時間ごとに費用がかかる（合わせて月 約44ドル）。使わないときは消す（S1-19 で `up` / `down` にまとめる）
+- **お金**：`staging` の RDS・ElastiCache・NAT は、置いているだけで1時間ごとに費用がかかる（合わせて月 約44ドル）。使わないときは消す（`infra/scripts/staging.sh down`。S1-19）
 
 - **state**：Terraform が AWS に作ったものの記録。S3 のバケット `yumeguri-tfstate-<環境>` に置く（バージョニング・暗号化・パブリックアクセスのブロック・HTTPS だけ）
 - **ロック**：同時に2人が apply しないように、S3 にロックのファイルを置く（`use_lockfile`。DynamoDB の表は使わない）
@@ -63,9 +63,13 @@ terraform plan     # 何が変わるかを読む。destroy・replace があれ�
 terraform apply
 ```
 
+### ふだんは up / down のスクリプトを使う（S1-19・ADR-027）
+
+`envs/staging` を作る・消すのは、**`infra/scripts/staging.sh up` / `down`** で行う（DB の準備・`/readyz` の確認まで含む）。手順は `docs/runbook/env-up-down.md`。毎晩 3:00（日本時間）に、消し忘れの安全網（`.github/workflows/staging-reaper.yml`）が `down` を動かす。
+
 ### 使い終わったら（費用のかかるものだけ消す）
 
-`envs/staging` で、時間で費用のかかるもの（ECS・ALB・RDS・Valkey）と、ALB を向いている `api.` の DNS を消す。VPC・NAT の EC2 は残る（全部消すときは `terraform destroy`）。
+`staging.sh down` が行うのは、次と同じこと。`envs/staging` で、時間で費用のかかるもの（ECS・ALB・RDS・Valkey）と、ALB を向いている `api-stg` の DNS を消す。VPC・NAT の EC2 は残る（全部消すときは `terraform destroy`）。
 
 ```bash
 cd infra/terraform/envs/staging
@@ -149,4 +153,4 @@ gh workflow run cd.yml --repo tkt-devs/yumeguri --ref main
 
 ### up したあと、DB のユーザーとマイグレーションだけを流すとき
 
-RDS を作り直すと、DB のユーザーも消える（`docs/runbook/db-users.md`）。up のあとは、手で CD を動かす（上）と、DB の準備から入れ替えまでが行われる（S1-19 で up に組み込む）。
+RDS を作り直すと、DB のユーザーも消える（`docs/runbook/db-users.md`）。`staging.sh up` は、apply のあとに DB の準備（ユーザー・マイグレーション・見本のデータ）まで行う。`terraform apply` を直接打ったときは、手で CD を動かす（上）と、DB の準備から入れ替えまでが行われる。
