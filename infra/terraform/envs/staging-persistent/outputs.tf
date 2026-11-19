@@ -63,3 +63,8 @@ output "github_deploy_role_arn" {
   description = "GitHub Actions が引き受けるロール（リポジトリのシークレット AWS_DEPLOY_ROLE_ARN に入れる）"
   value       = module.github_deploy.role_arn
 }
+
+output "github_reaper_role_arn" {
+  description = "安全網のジョブが引き受けるロール（Environment staging-reaper のシークレット AWS_REAPER_ROLE_ARN に入れる）"
+  value       = module.github_reaper.role_arn
+}

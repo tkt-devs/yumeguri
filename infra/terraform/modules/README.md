@@ -18,3 +18,4 @@ staging・production で同じものを作るための部品を置く。
 | `edge` | Cloudflare のゾーンの設定（Full (strict)）・ルール（秘密のヘッダー・キャッシュしない・Webhook を WAF から外す）・秘密のヘッダーの値（Secrets Manager） | S1-16 |
 | `cdn` | CloudFront・OAC・`img.` の DNS（灰色の雲） | S1-16 |
 | `github_deploy` | GitHub Actions の OIDC のプロバイダーと、デプロイ用のロール（このリポジトリの `main` からだけ引き受けられる） | S1-17 |
+| `github_reaper` | 消し忘れの安全網のロール（Environment `staging-reaper` のジョブからだけ引き受けられる。使うときだけの層のお金のかかるものだけを消せる） | S1-19 |

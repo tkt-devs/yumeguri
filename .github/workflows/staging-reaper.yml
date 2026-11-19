@@ -1,0 +1,82 @@
+# 消し忘れの安全網：毎晩 3:00（日本時間）に、staging の使うときだけの層（お金のかかるもの）を消す（S1-19・ADR-027）
+# リポジトリの変数 KEEP_UNTIL に日付（YYYY-MM-DD・日本時間）があれば、その日が終わるまでは消さない
+#   残すとき：gh variable set KEEP_UNTIL --repo tkt-devs/yumeguri --body 2026-11-25
+#   やめるとき：gh variable delete KEEP_UNTIL --repo tkt-devs/yumeguri
+
+name: staging の消し忘れの安全網
+
+on:
+  schedule:
+    # cron は UTC。18:00 UTC = 3:00 JST
+    - cron: '0 18 * * *'
+  # 手で動かして、消えるかを確かめるとき
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # OIDC の身分証（JWT）をもらうのに要る
+  id-token: write
+
+# CD（cd.yml）とは別のグループにする。同じグループだと、待っている CD の実行が取り消されることがある
+# （GitHub は、1つのグループで待てる実行を1つだけにする）。夜中の 3:00 に CD と重なることは、ほとんどない
+concurrency:
+  group: staging-reaper
+  cancel-in-progress: false
+
+jobs:
+  reap:
+    name: staging を消す
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    # 消す専用のロールは、この Environment のジョブからだけ引き受けられる（modules/github_reaper）
+    environment: staging-reaper
+    env:
+      AWS_REGION: ap-northeast-1
+      KEEP_UNTIL: ${{ vars.KEEP_UNTIL }}
+    steps:
+      - name: KEEP_UNTIL を確かめる
+        id: keep
+        run: |
+          today="$(TZ=Asia/Tokyo date +%F)"
+          if [ -z "$KEEP_UNTIL" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif ! [[ "$KEEP_UNTIL" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            # 書き方がおかしいときは、残すより消す方を選ぶ（費用が止まらないことの方が困る）
+            echo "::warning::KEEP_UNTIL（$KEEP_UNTIL）が YYYY-MM-DD の形ではないので、無視して消す"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$today" > "$KEEP_UNTIL" ]]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "- KEEP_UNTIL が $KEEP_UNTIL なので、今日（$today）は消さない" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.keep.outputs.skip != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - if: steps.keep.outputs.skip != 'true'
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          install_args: terraform
+
+      # 消す専用のロールを引き受ける。ARN は Environment のシークレットに入れてある
+      - if: steps.keep.outputs.skip != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_REAPER_ROLE_ARN }}
+          role-session-name: staging-reaper-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      # 止まっていれば、terraform は「消すものなし」で終わる
+      # api-stg の DNS も消す（ALB を指しているので、ALB と一緒に消える）。Cloudflare のトークンは、
+      # DNS だけを書ける専用のもの（Environment のシークレット）
+      - if: steps.keep.outputs.skip != 'true'
+        name: 使うときだけの層を消す
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "### staging の消し忘れの安全網" >> "$GITHUB_STEP_SUMMARY"
+          infra/scripts/staging.sh down --yes
