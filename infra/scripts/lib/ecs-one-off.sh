@@ -28,10 +28,25 @@ api_network() {
 #   $1：名前（db-bootstrap など。コンテナの名前・ログの頭も同じ。modules/ecs）
 #   $2：タスク定義（family か ARN）
 run_once() {
-  local name="$1" task_definition="$2" task stopped exit_code
-  task="$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$task_definition" \
-    --launch-type FARGATE --network-configuration "$API_NETWORK" \
-    --query 'tasks[0].taskArn' --output text)"
+  local name="$1" task_definition="$2" task="" stopped exit_code attempt error_file
+  error_file="$(mktemp)"
+  # 作ったばかりの IAM のロールは、AWS 全体に行き渡るまで数秒〜数十秒かかる（結果整合性）。
+  # その間は「ロールを引き受けられない」で失敗するので、その理由のときだけ、10 秒おきにやり直す
+  for attempt in 1 2 3 4 5 6 7 8 9; do
+    if task="$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$task_definition" \
+      --launch-type FARGATE --network-configuration "$API_NETWORK" \
+      --query 'tasks[0].taskArn' --output text 2>"$error_file")"; then
+      break
+    fi
+    if ! grep -q 'unable to assume the role' "$error_file" || [ "$attempt" = 9 ]; then
+      cat "$error_file" >&2
+      rm -f "$error_file"
+      exit 1
+    fi
+    echo "$name：ロールがまだ使えない（作ったばかり）。10 秒待ってやり直す（$attempt 回目）"
+    sleep 10
+  done
+  rm -f "$error_file"
   if [ -z "$task" ] || [ "$task" = "None" ]; then
     echo "::error::$name のタスクを起動できなかった"
     exit 1
