@@ -86,6 +86,14 @@ data "aws_iam_policy_document" "reaper" {
     ]
   }
 
+  # terraform は消すときも、DB のパスワードを作る部品（ephemeral の aws_secretsmanager_random_password）を開く。
+  # ランダムな文字列を返すだけで、何も作らない・読まない（AWS がリソースを絞れない操作）
+  statement {
+    sid       = "RandomPassword"
+    actions   = ["secretsmanager:GetRandomPassword"]
+    resources = ["*"]
+  }
+
   # ---- ここから下は消すだけ ----
 
   # ECS：サービスを0台にしてから消す・クラスターを消す（terraform の aws プロバイダーの消し方）
