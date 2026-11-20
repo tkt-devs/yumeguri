@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { ERROR_STATUS, type ProblemDetails } from '@yumeguri/shared';
 import type { Context, ErrorHandler, NotFoundHandler } from 'hono';
 import type { AppEnv } from '../types';
@@ -31,5 +32,8 @@ export const handleError: ErrorHandler<AppEnv> = (err, c) => {
   const header = String(err);
   const where = err.stack?.startsWith(header) ? err.stack.slice(header.length).trim() : undefined;
   c.var.logger.error({ errorName: err.name, stack: where }, 'unexpected error');
+  // Sentry にも送る（メッセージは送る前に消す。monitoring/sentry.ts）。Sentry を準備していなければ何もしない
+  // 相関 ID を付けて、Sentry の画面から CloudWatch Logs の同じリクエストを探せるようにする
+  Sentry.captureException(err, { tags: { correlation_id: c.var.requestId } });
   return problem(c, new InternalError());
 };

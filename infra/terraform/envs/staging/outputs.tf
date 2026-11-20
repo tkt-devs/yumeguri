@@ -42,3 +42,7 @@ output "ecs_cluster_name" {
 output "api_url" {
   value = "https://${local.persistent.hosts.api}"
 }
+
+output "alarm_names" {
+  value = module.alarms.alarm_names
+}

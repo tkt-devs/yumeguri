@@ -52,6 +52,9 @@ USER node
 # pnpm・TypeScript・node_modules は入らないので、小さく、攻撃に使える道具も少ない
 FROM node:24-trixie-slim AS runtime
 ENV NODE_ENV=production
+# どのコードのイメージか（Git のコミット ID の先頭 12 文字。CD が --build-arg で渡す）。Sentry のリリースになる
+ARG SENTRY_RELEASE=dev
+ENV SENTRY_RELEASE=$SENTRY_RELEASE
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/api/dist ./dist
 # RDS の CA の束。DATABASE_URL の sslmode=verify-full で、RDS の証明書を確かめるのに使う

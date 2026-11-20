@@ -1,3 +1,5 @@
+// Sentry をいちばん先に準備する（ほかの import より前。Sentry の公式の手順：まとめるときは先頭で import する）
+import './instrument';
 import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { loadEnv } from './config/env';

@@ -13,3 +13,8 @@ variable "vercel_cname_target" {
   type        = string
   default     = ""
 }
+
+variable "alarm_email" {
+  description = "アラームを知らせるメールアドレス（terraform.tfvars に書く。リポジトリには書かない）"
+  type        = string
+}

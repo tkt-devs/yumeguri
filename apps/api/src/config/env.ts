@@ -16,6 +16,11 @@ export const EnvSchema = z.object({
   // SQS の接続先と認証は、AWS の SDK が自分で決める（ローカルは AWS_PROFILE=localstack、本番は ECS のタスクロール）
   SQS_QUEUE_URL_DEFAULT: z.url(),
   SQS_QUEUE_URL_HEAVY: z.url(),
+  // エラーの送り先（Sentry の DSN。ADR-017・S1-20）。なければ Sentry に送らない（ローカル・テスト）
+  // 空の文字列は「なし」とみなす（.env.example の SENTRY_DSN= のまま使えるように）
+  SENTRY_DSN: z.preprocess((value) => (value === '' ? undefined : value), z.url().optional()),
+  // どのコードのエラーか（Git のコミット ID の先頭 12 文字。イメージを作るときに入れる。apps/api/Dockerfile）
+  SENTRY_RELEASE: z.string().min(1).default('dev'),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

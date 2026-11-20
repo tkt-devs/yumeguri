@@ -11,3 +11,9 @@ def add(x: int, y: int) -> int:
     result = x + y
     logger.info("debug.add", extra={"x": x, "y": y, "result": result})
     return result
+
+
+# S1-20 の確認用：わざとエラーを起こして、Sentry に届くかを見る。確かめたら消す
+@celery_app.task(name="debug.fail")
+def fail() -> None:
+    raise RuntimeError("S1-20 の確認用のエラー")

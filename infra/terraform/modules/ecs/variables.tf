@@ -58,6 +58,12 @@ variable "worker_environment" {
   type        = map(string)
 }
 
+variable "worker_secrets" {
+  description = "ワーカーに渡す、シークレットからの環境変数（api_secrets と同じ書き方）"
+  type        = map(string)
+  default     = {}
+}
+
 variable "api_target_group_arn" {
   description = "API のタスクを登録する ALB のターゲットグループ"
   type        = string

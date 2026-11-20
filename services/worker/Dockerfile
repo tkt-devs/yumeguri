@@ -28,6 +28,9 @@ COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/app /app/app
 # .venv の中の celery・python を使う。ログを溜めずにすぐ出す
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+# どのコードのイメージか（Git のコミット ID の先頭 12 文字。CD が --build-arg で渡す）。Sentry のリリースになる
+ARG SENTRY_RELEASE=dev
+ENV SENTRY_RELEASE=$SENTRY_RELEASE
 USER worker
 # Linux では Celery の初期の prefork で動く（時間の上限が効く）
 # HEALTHCHECK は書かない：Celery のワーカーには HTTP の窓口がなく、SQS では Celery の ping も使えない

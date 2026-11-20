@@ -16,6 +16,7 @@
     "@hono/node-server": "^2.1.5",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@sentry/node": "11.13.0",
     "@yumeguri/shared": "workspace:*",
     "hono": "^4.13.14",
     "pg": "^8.23.1",
