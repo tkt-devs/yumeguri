@@ -77,6 +77,12 @@ jobs:
         name: 使うときだけの層を消す
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          REAPER_ROLE_ARN: ${{ secrets.AWS_REAPER_ROLE_ARN }}
         run: |
+          # envs/staging の account_id（ほかのアカウントを操作しないための鍵）は、手元では gitignore した
+          # terraform.tfvars から読む。ここでは、ロールの ARN（arn:aws:iam::<アカウント ID>:role/…）から取り出す
+          account_id="$(cut -d: -f5 <<<"$REAPER_ROLE_ARN")"
+          echo "::add-mask::$account_id"
+          export TF_VAR_account_id="$account_id"
           echo "### staging の消し忘れの安全網" >> "$GITHUB_STEP_SUMMARY"
           infra/scripts/staging.sh down --yes
