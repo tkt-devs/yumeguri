@@ -5,9 +5,9 @@ description = "ゆめぐりの非同期ジョブ（Celery・SQS）と、運用�
 # Celery が対応を明記しているのは 3.13 まで
 requires-python = "==3.13.*"
 dependencies = [
-    "celery[sqs]==5.6.3",
-    "fastapi==0.162.0",
-    "pydantic-settings==2.16.2",
+    "celery[sqs]==5.7.0",
+    "fastapi==0.162.7",
+    "pydantic-settings==2.16.3",
     "python-json-logger==4.2.0",
     "sentry-sdk==2.75.0",
     "uvicorn==0.54.0",
@@ -19,7 +19,7 @@ dev = [
     "httpx2==2.16.0",
     "mypy==2.4.1",
     "pytest==9.2.0",
-    "ruff==0.17.3",
+    "ruff==0.17.5",
 ]
 
 [tool.uv]
