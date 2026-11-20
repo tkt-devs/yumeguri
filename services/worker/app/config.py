@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     # ワーカーは URL を受け取るだけ
     sqs_queue_url_default: HttpUrl
     sqs_queue_url_heavy: HttpUrl
+    # エラーの送り先（Sentry の DSN。ADR-017・S1-20）
+    # なければ Sentry に送らない（ローカル・テスト）
+    # 空の文字列も「なし」とみなす（.env.example の SENTRY_DSN= のまま使えるように）
+    sentry_dsn: str | None = None
+    # staging・production。ECS のタスク定義で渡す
+    sentry_environment: str = "development"
+    # どのコードのエラーか（Git のコミット ID の先頭 12 文字）
+    # イメージを作るときに入れる（Dockerfile）
+    sentry_release: str = "dev"
 
 
 def load_settings() -> Settings:

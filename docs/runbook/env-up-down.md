@@ -31,7 +31,7 @@ infra/scripts/staging.sh up
 infra/scripts/staging.sh down
 ```
 
-`envs/staging` の、お金のかかるもの（ECS・ALB・RDS・Valkey・タスクのロール）と、`api-stg` の DNS を消す。VPC・NAT の EC2・ずっと残す層（ECR・S3・証明書）は残る。
+`envs/staging` の、お金のかかるもの（ECS・ALB・RDS・Valkey・タスクのロール）と、アラーム（S1-20）と、`api-stg` の DNS を消す。VPC・NAT の EC2・ずっと残す層（ECR・S3・証明書）は残る。
 
 復元の訓練をするときだけ、消す前に RDS のスナップショットを取る。スナップショットは保存料がかかるので、使い終わったら消す。
 

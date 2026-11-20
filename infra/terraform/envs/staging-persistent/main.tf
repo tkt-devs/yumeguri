@@ -161,3 +161,19 @@ resource "cloudflare_dns_record" "app" {
   proxied = false
   comment = "Vercel (Terraform)"
 }
+
+# ---- アラームの知らせ先（S1-20・ADR-017） ----
+
+# アラームが鳴った・戻ったときに、メールで知らせる。アラームそのものは、使うときだけの層（envs/staging）が作る
+# 暗号化しない：CloudWatch のアラームは、AWS が用意した鍵（aws/sns）で暗号化したトピックには送れないため
+# （中身はアラームの名前と状態だけで、秘密の値は入らない）
+resource "aws_sns_topic" "alarms" {
+  name = "yumeguri-staging-alarms"
+}
+
+# 作ると、確認のメールが届く。メールの「Confirm subscription」を押すまで、知らせは届かない
+resource "aws_sns_topic_subscription" "alarm_email" {
+  topic_arn = aws_sns_topic.alarms.arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
+}

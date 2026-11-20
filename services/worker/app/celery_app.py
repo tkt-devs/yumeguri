@@ -6,6 +6,7 @@ from kombu import Queue
 
 from app.config import Settings, load_settings
 from app.logs import configure_logging, correlation_id_var
+from app.monitoring import init_sentry
 
 # キューの名前（ADR-012）。軽いジョブは default、重いジョブは heavy
 QUEUE_DEFAULT = "jobs-default"
@@ -82,6 +83,10 @@ def create_celery_app(settings: Settings) -> Celery:
 
 
 settings = load_settings()
+# Sentry を、ワーカーが起動するときに準備する
+# （タスクを書いたファイルだけでなく。Sentry の公式の手順）
+# Celery の部品は自動で有効になり、タスクの中のエラーが送られる
+init_sentry(settings)
 celery_app = create_celery_app(settings)
 
 

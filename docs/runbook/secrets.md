@@ -7,7 +7,7 @@ Terraform（`envs/staging-persistent`）は、シークレットの **入れ物*
 | 名前 | 中身 | 値を入れる時期 |
 | --- | --- | --- |
 | `yumeguri/staging/google-oauth` | Google のクライアント ID とシークレット（JSON：`{"client_id": …, "client_secret": …}`） | Google のログインを作るとき |
-| `yumeguri/staging/sentry-dsn` | Sentry の DSN | S1-20 |
+| `yumeguri/staging/sentry-dsn` | Sentry の DSN（JSON：`{"api": …, "worker": …}`。Sentry のプロジェクト `yumeguri-api`・`yumeguri-worker` の DSN。Web の DSN は Vercel の環境変数） | S1-20 |
 | `yumeguri/staging/qr-signing-key` | QR の署名の鍵（JSON：`{"kid": …, "key": …}`） | QR のチェックインを作るとき |
 | `yumeguri/staging/session-secret` | セッションの Cookie の鍵 | ログインを作るとき |
 

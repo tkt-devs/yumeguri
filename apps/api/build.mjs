@@ -14,8 +14,9 @@ await build({
   // 元のソースの中身は .map に入れない（行の対応だけで足りる。.map が小さくなる）
   sourcesContent: false,
   // 古い形（CommonJS）の部品は require() を使う。ESM のファイルには require がないので、先頭で作っておく
+  // 中の部品（Sentry など）も createRequire を import するので、名前がぶつからないように別名にする
   banner: {
-    js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    js: "import { createRequire as __bannerCreateRequire } from 'node:module'; const require = __bannerCreateRequire(import.meta.url);",
   },
   logLevel: 'info',
 });

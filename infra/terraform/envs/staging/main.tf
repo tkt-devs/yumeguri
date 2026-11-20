@@ -82,7 +82,8 @@ module "iam_ecs" {
   db_tasks_log_group_arn      = module.ecs.db_tasks_log_group_arn
   db_tasks_secret_arns        = concat([module.rds.master_user_secret_arn], values(local.db_users))
   # 起動のときに読むのは、API の DB のパスワードだけ（ワーカーは、まだ DB を使わない）
-  startup_secret_arns     = [local.db_users["yumeguri_app"]]
+  # Sentry の DSN（S1-20）は API・ワーカーの両方が読む
+  startup_secret_arns     = [local.db_users["yumeguri_app"], local.persistent.app_secret_arns["sentry-dsn"]]
   private_bucket_arn      = local.persistent.bucket_arns["private"]
   public_bucket_arn       = local.persistent.bucket_arns["public"]
   queue_arns              = values(local.persistent.queue_arns)
@@ -146,9 +147,16 @@ module "ecs" {
   # シークレットの JSON の url のキーを、DATABASE_URL として渡す
   api_secrets = {
     DATABASE_URL = "${local.db_users["yumeguri_app"]}:url::"
+    # Sentry の DSN（S1-20）。シークレットの JSON の api・worker のキーに、プロジェクトごとの DSN が入っている
+    SENTRY_DSN = "${local.persistent.app_secret_arns["sentry-dsn"]}:api::"
   }
 
-  worker_environment = local.shared_environment
+  worker_environment = merge(local.shared_environment, {
+    SENTRY_ENVIRONMENT = "staging"
+  })
+  worker_secrets = {
+    SENTRY_DSN = "${local.persistent.app_secret_arns["sentry-dsn"]}:worker::"
+  }
 
   # DB の準備用の単発のタスク（S1-17）
   db_tasks_image              = "${local.persistent.ecr_repository_urls["yumeguri-db-tasks"]}:${local.image_tag}"
@@ -185,4 +193,17 @@ module "ecs" {
       secrets     = { MIGRATE_DATABASE_URL = "${local.db_users["yumeguri_migrator"]}:url::" }
     }
   }
+}
+
+# ---- 最初のアラーム（S1-20・ADR-017） ----
+# ALB・ECS と一緒に作って消す（infra/scripts/staging.sh down の -target に入っている）
+module "alarms" {
+  source = "../../modules/alarms"
+
+  name                        = "yumeguri-staging"
+  alarm_topic_arn             = local.persistent.alarm_topic_arn
+  alb_arn_suffix              = module.alb.arn_suffix
+  api_target_group_arn_suffix = module.alb.api_target_group_arn_suffix
+  cluster_name                = module.ecs.cluster_name
+  service_names               = ["api", "worker"]
 }

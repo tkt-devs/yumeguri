@@ -26,6 +26,7 @@ locals {
   api_environment    = [for k, v in var.api_environment : { name = k, value = v }]
   api_secrets        = [for k, v in var.api_secrets : { name = k, valueFrom = v }]
   worker_environment = [for k, v in var.worker_environment : { name = k, value = v }]
+  worker_secrets     = [for k, v in var.worker_secrets : { name = k, valueFrom = v }]
 
   log_options = {
     for k, g in aws_cloudwatch_log_group.this : k => {
@@ -100,6 +101,7 @@ resource "aws_ecs_task_definition" "worker" {
       image       = var.worker_image
       essential   = true
       environment = local.worker_environment
+      secrets     = local.worker_secrets
       logConfiguration = {
         logDriver = "awslogs"
         options   = local.log_options["worker"]

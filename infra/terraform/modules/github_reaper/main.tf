@@ -183,6 +183,13 @@ data "aws_iam_policy_document" "reaper" {
     ]
   }
 
+  # アラーム（S1-20。modules/alarms）
+  statement {
+    sid       = "Alarms"
+    actions   = ["cloudwatch:DeleteAlarms"]
+    resources = ["${local.prefix}:cloudwatch:${local.in_region}:alarm:${var.name}-*"]
+  }
+
   # RDS のユーザー・Valkey の AUTH のシークレット（<secret_prefix>/db/*・<secret_prefix>/valkey-auth）
   # ずっと残す層のシークレット（origin-header など）は消さない
   statement {

@@ -68,3 +68,8 @@ output "github_reaper_role_arn" {
   description = "安全網のジョブが引き受けるロール（Environment staging-reaper のシークレット AWS_REAPER_ROLE_ARN に入れる）"
   value       = module.github_reaper.role_arn
 }
+
+output "alarm_topic_arn" {
+  description = "アラームを知らせる SNS のトピック（envs/staging のアラームが使う）"
+  value       = aws_sns_topic.alarms.arn
+}

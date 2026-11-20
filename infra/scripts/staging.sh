@@ -3,7 +3,7 @@
 #
 #   使い方：
 #     infra/scripts/staging.sh up            作る → DB の準備（ユーザー・表・見本のデータ）→ /readyz の確認
-#     infra/scripts/staging.sh down          お金のかかるもの（ECS・ALB・RDS・Valkey）と api-stg の DNS を消す
+#     infra/scripts/staging.sh down          お金のかかるもの（ECS・ALB・RDS・Valkey）・アラームと api-stg の DNS を消す
 #     infra/scripts/staging.sh down --snapshot   消す前に、RDS のスナップショットを取る（復元の訓練のときだけ）
 #
 #   オプション：
@@ -116,8 +116,9 @@ down() {
   load_cloudflare_token
 
   # お金のかかるものと、ALB を指している DNS。VPC・NAT の EC2 は残す（全部消すときは、envs/staging で terraform destroy）
+  # アラーム（module.alarms）も消す。残すと、ALB・ECS のデータがなくて鳴り続ける
   targets=(-target=module.ecs -target=module.alb -target=module.iam_ecs -target=module.rds -target=module.valkey
-    -target=cloudflare_dns_record.api)
+    -target=module.alarms -target=cloudflare_dns_record.api)
 
   if [ "$SNAPSHOT" = "true" ]; then
     take_snapshot
