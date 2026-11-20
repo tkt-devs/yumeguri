@@ -16,3 +16,9 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     eslint: '10'
+
+# 依存の依存の版を、弱点の直った版に上げる（pnpm audit が high で落ちるため）
+# effect：Prisma（@prisma/config）が 3.20.0 に固定している。ReDoS（GHSA-7589-6fvf-x4pw）は 3.22.1 で直った。
+#   Prisma が新しい版に上げたら、この行を消す
+overrides:
+  effect: '^3.22.1'
