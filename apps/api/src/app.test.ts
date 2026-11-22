@@ -3,6 +3,7 @@ import { CORRELATION_ID_HEADER } from '@yumeguri/shared';
 import { createApp } from './app';
 import { createLogger } from './logger';
 import { READINESS_CHECK_TIMEOUT_MS, type ReadinessCheck } from './services/readiness';
+import { StoreService } from './services/storeService';
 
 const WEB_ORIGIN = 'http://localhost:3000';
 
@@ -10,7 +11,21 @@ const WEB_ORIGIN = 'http://localhost:3000';
 function setup(readinessChecks: ReadinessCheck[] = []) {
   const logs: unknown[] = [];
   const logger = createLogger('info', { write: (line) => logs.push(JSON.parse(line)) });
-  const app = createApp({ logger, webOrigin: WEB_ORIGIN, readinessChecks });
+  const storeService = new StoreService(
+    {
+      listPublished: async () => [
+        {
+          id: '019a4000-0000-7000-8000-000000000201',
+          slug: 'ume-no-yu',
+          name: '梅の湯',
+          thumbnailKey: null,
+        },
+      ],
+      findPublicBySlug: async () => null,
+    },
+    'https://img.example.com',
+  );
+  const app = createApp({ logger, webOrigin: WEB_ORIGIN, readinessChecks, storeService });
   return { app, logs };
 }
 
@@ -21,6 +36,40 @@ const down: ReadinessCheck = {
     throw new Error('connect ECONNREFUSED');
   },
 };
+
+describe('GET /v1/stores', () => {
+  it('ログインなしで 200 と一覧を返す', async () => {
+    const { app } = setup();
+    const res = await app.request('/v1/stores');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      items: [{ slug: 'ume-no-yu', thumbnailUrl: null }],
+      nextCursor: null,
+    });
+  });
+
+  it.each(['limit=0', 'limit=51', 'limit=abc', 'cursor=broken'])(
+    '%s は 422 と VALIDATION_FAILED を返し、どの項目かを示す',
+    async (query) => {
+      const { app } = setup();
+      const res = await app.request(`/v1/stores?${query}`);
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({
+        code: 'VALIDATION_FAILED',
+        errors: [{ path: query.split('=')[0] }],
+      });
+    },
+  );
+});
+
+describe('GET /v1/stores/:slug', () => {
+  it('見つからなければ 404 と NOT_FOUND を返す', async () => {
+    const { app } = setup();
+    const res = await app.request('/v1/stores/no-such-store');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
 
 describe('GET /healthz', () => {
   it('いつも 200 を返す', async () => {

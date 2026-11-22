@@ -15,6 +15,7 @@ function problem(c: Context<AppEnv>, err: AppError) {
     status,
     code: err.code,
     correlationId: c.var.requestId,
+    errors: err.errors,
   };
   return c.json(body, status, { 'Content-Type': 'application/problem+json' });
 }

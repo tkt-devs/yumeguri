@@ -143,6 +143,8 @@ module "ecs" {
     NODE_ENV   = "staging"
     PORT       = tostring(local.api_port)
     WEB_ORIGIN = "https://${local.persistent.hosts.app}"
+    # 公開用の画像の URL の先頭（CloudFront。S2-03）
+    PUBLIC_IMAGE_BASE_URL = "https://${local.persistent.hosts.img}"
   })
   # シークレットの JSON の url のキーを、DATABASE_URL として渡す
   api_secrets = {

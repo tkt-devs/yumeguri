@@ -3,6 +3,7 @@ import './instrument';
 import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { loadEnv } from './config/env';
+import { createServices } from './factories';
 import { createLogger } from './logger';
 import { createPrismaClient, pingDatabase } from './repositories/prismaClient';
 
@@ -16,6 +17,7 @@ const app = createApp({
   logger,
   webOrigin: env.WEB_ORIGIN,
   readinessChecks: [{ name: 'db', check: () => pingDatabase(prisma) }],
+  ...createServices(prisma, env),
 });
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {

@@ -145,6 +145,7 @@
 
 - **一意**：`slug`、`(id, organization_id)`（Membership と Visit の複合外部キーの参照先にするため。id だけで一意なので、意味としては同じ）
 - **索引**：`(organization_id, status)`
+- **部分インデックス [SQL]**：`(name, id) WHERE status = 'published' AND deleted_at IS NULL`（公開の一覧を名前の順に取るときに使う）
 - v0.1 では、`area_id`・`search_text` は作らない（S2-03b で足す）
 
 ### BusinessHour（営業時間）
