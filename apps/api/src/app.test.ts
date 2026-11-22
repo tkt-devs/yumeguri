@@ -161,4 +161,69 @@ describe('CORS', () => {
     const res = await app.request('/healthz', { headers: { Origin: 'https://evil.example' } });
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
+
+  it('確認のリクエスト（OPTIONS）の答えを、10 分覚えさせる', async () => {
+    const { app } = setup();
+    const res = await app.request('/healthz', {
+      method: 'OPTIONS',
+      headers: { Origin: WEB_ORIGIN, 'Access-Control-Request-Method': 'POST' },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Max-Age')).toBe('600');
+  });
+});
+
+describe('CSRF（Origin の確認）', () => {
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('%s：ほかのサイトからは 403', async (method) => {
+    const { app } = setup();
+    const res = await app.request('/healthz', {
+      method,
+      headers: { Origin: 'https://evil.example' },
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('Origin がない POST も 403', async () => {
+    const { app } = setup();
+    const res = await app.request('/healthz', { method: 'POST' });
+    expect(res.status).toBe(403);
+  });
+
+  it('よく似たドメインは通さない', async () => {
+    const { app } = setup();
+    const res = await app.request('/healthz', {
+      method: 'POST',
+      headers: { Origin: `${WEB_ORIGIN}.evil.example` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('画面からの POST は通す（この場所に POST の処理はないので 404）', async () => {
+    const { app } = setup();
+    const res = await app.request('/healthz', { method: 'POST', headers: { Origin: WEB_ORIGIN } });
+    expect(res.status).toBe(404);
+  });
+
+  it('GET は Origin がなくても通す', async () => {
+    const { app } = setup();
+    const res = await app.request('/healthz');
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('セキュリティヘッダー', () => {
+  it.each([
+    ['正常', '/healthz'],
+    ['404', '/no-such-path'],
+  ])('%s の返事にも付く', async (_name, path) => {
+    const { app } = setup();
+    const res = await app.request(path);
+    expect(res.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
+    expect(res.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+    expect(res.headers.get('Strict-Transport-Security')).toBe('max-age=15552000');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(res.headers.get('Permissions-Policy')).toContain('camera=()');
+  });
 });

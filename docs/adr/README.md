@@ -27,3 +27,4 @@
 | [ADR-025](025-branch-and-release.md) | ブランチは main だけにし、本番には Release の公開で出す |
 | [ADR-026](026-cd-staging.md) | staging の CD は、CI の成功のあとに OIDC で入り、動いているときだけ入れ替える |
 | [ADR-027](027-staging-up-down-and-reaper.md) | staging は1つのコマンドで作って消し、消し忘れは毎晩 GitHub Actions が消す |
+| [ADR-028](028-security-headers.md) | セキュリティヘッダーは Cloudflare ではなくアプリで付け、CSP は nonce を使わない形にする |

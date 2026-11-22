@@ -16,6 +16,12 @@ export class NotFoundError extends AppError {
   }
 }
 
+export class ForbiddenError extends AppError {
+  constructor() {
+    super('FORBIDDEN', 'この操作はできません');
+  }
+}
+
 export class ServiceUnavailableError extends AppError {
   constructor() {
     super('SERVICE_UNAVAILABLE', '一時的に利用できません');
