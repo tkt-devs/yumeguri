@@ -1,6 +1,7 @@
 import type { RequestIdVariables } from 'hono/request-id';
 import type { Logger } from 'pino';
 import type { ReadinessCheck } from './services/readiness';
+import type { StoreService } from './services/storeService';
 
 // Hono の c.var で使える値（相関 ID と、相関 ID の付いたロガー）
 export type AppEnv = {
@@ -12,4 +13,5 @@ export type AppDeps = {
   logger: Logger;
   webOrigin: string;
   readinessChecks: readonly ReadinessCheck[];
+  storeService: StoreService;
 };
